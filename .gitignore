@@ -1,0 +1,7 @@
+﻿**/.vs/
+**/*.db
+**/*.ipch
+**/x64/
+**/Debug/
+**/Release/
+**/CopilotIndices/
