@@ -40,7 +40,7 @@ public:
     void ProcessMouseMovement(float xOffset, float yOffset,
                               bool constrainPitch = true);
 
-private:
+//private:
     // Recalcula Front, Right y Up a partir de Yaw y Pitch
     void UpdateCameraVectors();
 };

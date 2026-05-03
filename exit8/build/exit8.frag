@@ -24,7 +24,7 @@ uniform vec3 uAmbient;
 // ─── Luces de techo (Point Lights) ───────────────────────────────────────────
 // Soportamos hasta 8 fluorescentes en el techo.
 // En la práctica se usarán las que haya definidas en MAX_LIGHTS.
-#define MAX_LIGHTS 8
+#define MAX_LIGHTS 16
 
 struct PointLight {
     vec3  position;     // Posición en world-space (colgando del techo)
