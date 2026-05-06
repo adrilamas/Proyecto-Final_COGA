@@ -5,11 +5,11 @@ static constexpr int   SCR_WIDTH       = 1280;
 static constexpr int   SCR_HEIGHT      = 720;
 
 // ── Geometría de habitación ───────────────────────────────────────────────────
-static constexpr float RW              = 8.0f;   // ancho  (X)
-static constexpr float RD              = 8.0f;   // fondo  (Z)
+static constexpr float RW              = 20.0f;   // ancho  (X)
+static constexpr float RD              = 3.0f;   // fondo  (Z)
 static constexpr float RH              = 3.5f;   // altura (Y)
 static constexpr float CW              = 3.0f;   // ancho del corredor
-static constexpr float CL              = 12.0f;  // longitud total de cada corredor
+static constexpr float CL              =12.0f;  // longitud total de cada corredor
 static constexpr float EYE             = 1.7f;   // altura de los ojos del jugador
 
 // ── Variantes ─────────────────────────────────────────────────────────────────

@@ -1,6 +1,3 @@
-// =============================================================================
-//  main.cpp  ─  Exit 8 | Punto de entrada y bucle principal
-// =============================================================================
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -169,39 +166,75 @@ int main()
 
         processInput(window);
         applyCollisions(camera.Position, variants[G.currentVariant]);
-
+/*
         // ── Triggers de teleport ──────────────────────────────────────────────
         if (G.state == GameState::PLAYING)
+{
+    const RoomVariant& V = variants[G.currentVariant];
+    float camZ = camera.Position.z;
+
+    // Trigger en el lado Norte (Z positivo)
+    if (camZ > V.origin.z + 12.0f) 
+    {
+        // Si viniste del lado A (Sur) y sigues hacia el Norte, vas "Adelante"
+        bool isRetreating = (G.entryDir == EntryDir::FROM_B); 
+        bool anomaly      = (G.currentAnomaly != AnomalyType::NONE);
+        bool correct      = isRetreating ? anomaly : !anomaly;
+
+        if (correct) G.score++; else G.score = 0;
+        
+        // Te mandamos al lado A (Sur) para que parezca que vienes de atrás
+        triggerTeleport(nextVariantIdx(G.currentVariant), true, correct);
+    } 
+    // Trigger en el lado Sur (Z negativo)
+    else if (camZ < V.origin.z - 12.0f) 
+    {
+        bool isRetreating = (G.entryDir == EntryDir::FROM_A);
+        bool anomaly      = (G.currentAnomaly != AnomalyType::NONE);
+        bool correct      = isRetreating ? anomaly : !anomaly;
+
+        if (correct) G.score++; else G.score = 0;
+
+        // Te mandamos al lado B (Norte)
+        triggerTeleport(nextVariantIdx(G.currentVariant), false, correct);
+    }
+}
+*/
+
+// ── Triggers de teleport ──────────────────────────────────────────────
+        if (G.state == GameState::PLAYING)
         {
-            const RoomVariant& V  = variants[G.currentVariant];
+            const RoomVariant& V = variants[G.currentVariant];
             float camZ = camera.Position.z;
-            float camX = camera.Position.x;
 
-            bool inTurnA = (camZ < V.origin.z - 13.0f) && (camZ > V.origin.z - 16.0f);
-            bool inTurnB = (camZ > V.origin.z + 13.0f) && (camZ < V.origin.z + 16.0f);
+            float cor_len = CL - CW;
+            float zDistNear = (RD / 2.0f) + cor_len;
 
-            float trigA_X = V.origin.x + 5.0f;
-            float trigB_X = V.origin.x - 5.0f;
+            // Margen del trigger (3.5 unidades ANTES de la pared del codo)
+            float triggerMargin = 3.5f;
+            float triggerDist = zDistNear - triggerMargin;
 
-            if (inTurnA && camX > trigA_X) {
-                bool isRetreating = (G.entryDir == EntryDir::FROM_A);
-                bool anomaly      = (G.currentAnomaly != AnomalyType::NONE);
-                bool correct      = isRetreating ? anomaly : !anomaly;
-
-                if (correct) G.score++; else G.score = 0;
-                G.highScore = std::max(G.score, G.highScore);
-
-                triggerTeleport(nextVariantIdx(G.currentVariant), false, correct);
-
-            } else if (inTurnB && camX < trigB_X) {
+            // Trigger en el lado Norte (Z positivo)
+            if (camZ > V.origin.z + triggerDist)
+            {
                 bool isRetreating = (G.entryDir == EntryDir::FROM_B);
-                bool anomaly      = (G.currentAnomaly != AnomalyType::NONE);
-                bool correct      = isRetreating ? anomaly : !anomaly;
+                bool anomaly = (G.currentAnomaly != AnomalyType::NONE);
+                bool correct = isRetreating ? anomaly : !anomaly;
 
                 if (correct) G.score++; else G.score = 0;
-                G.highScore = std::max(G.score, G.highScore);
 
                 triggerTeleport(nextVariantIdx(G.currentVariant), true, correct);
+            }
+            // Trigger en el lado Sur (Z negativo)
+            else if (camZ < V.origin.z - triggerDist)
+            {
+                bool isRetreating = (G.entryDir == EntryDir::FROM_A);
+                bool anomaly = (G.currentAnomaly != AnomalyType::NONE);
+                bool correct = isRetreating ? anomaly : !anomaly;
+
+                if (correct) G.score++; else G.score = 0;
+
+                triggerTeleport(nextVariantIdx(G.currentVariant), false, correct);
             }
         }
 

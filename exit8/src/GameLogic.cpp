@@ -73,18 +73,67 @@ void activateLights(const RoomVariant& V)
 // =============================================================================
 //  spawnAtCorridor
 // =============================================================================
-void spawnAtCorridor(const RoomVariant& V, bool corA)
+/*void spawnAtCorridor(const RoomVariant& V, bool corA)
 {
     if (corA) {
         // Zona segura en X=+3.5, mira hacia –X (pasillo recto A)
-        camera.Position = V.origin + glm::vec3( 3.5f, EYE, -14.5f);
-        camera.Yaw      = 180.0f;
+        camera.Position = V.origin + glm::vec3( -2.5f, EYE, -11.5f);
+        //camera.Yaw      = 180.0f;
     } else {
         // Zona segura en X=-3.5, mira hacia +X (pasillo recto B)
-        camera.Position = V.origin + glm::vec3(-3.5f, EYE,  14.5f);
-        camera.Yaw      = 0.0f;
+        camera.Position = V.origin + glm::vec3(2.5f, EYE,  11.5f);
+        //camera.Yaw      = 0.0f;
     }
     camera.Pitch = 0.0f;
+    camera.UpdateCameraVectors();
+    firstMouse = true;
+}*/
+
+/*void spawnAtCorridor(const RoomVariant& V, bool corA)
+{
+    if (corA) {
+        // --- SPAWN EN PASILLO NORTE (A) ---
+        // El pasillo está en X = 2.5. Aparecemos un poco antes del trigger de Z.
+        // Nos posicionamos en Z = -11.0 para caminar hacia el centro (+Z).
+        camera.Position = V.origin + glm::vec3(2.5f, EYE, -8.0f);
+    }
+    else {
+        // --- SPAWN EN PASILLO SUR (B) ---
+        // El pasillo está en X = -2.5.
+        // Nos posicionamos en Z = 11.0 para caminar hacia el centro (-Z).
+        camera.Position = V.origin + glm::vec3(-2.5f, EYE, 8.0f);
+    }
+
+    camera.UpdateCameraVectors();
+    firstMouse = true; // Evita el salto brusco de la cámara al procesar el primer movimiento del ratón
+}*/
+
+void spawnAtCorridor(const RoomVariant& V, bool corA)
+{
+    float hw = RW / 2.f;
+    float cor_len = CL - CW;
+    float zDistNear = (RD / 2.f) + cor_len;
+
+    // Mismos valores que usamos arriba para mantener la coherencia
+    float triggerMargin = 3.5f;
+
+    // Spawneamos 2 unidades MÁS CERCA de la habitación que el trigger, 
+    // así el jugador está 100% a salvo de auto-teletransportarse al aparecer.
+    float spawnOffsetZ = zDistNear - (triggerMargin + 2.0f);
+
+    // Centros X corregidos (A está en la Izquierda, B está en la Derecha)
+    float xCenter_A = -hw + (CW / 2.f);
+    float xCenter_B = hw - (CW / 2.f);
+
+    if (corA) {
+        // Pasillo A (Sur). Z es negativo.
+        camera.Position = V.origin + glm::vec3(xCenter_A, EYE, -spawnOffsetZ);
+    }
+    else {
+        // Pasillo B (Norte). Z es positivo.
+        camera.Position = V.origin + glm::vec3(xCenter_B, EYE, spawnOffsetZ);
+    }
+
     camera.UpdateCameraVectors();
     firstMouse = true;
 }
@@ -117,6 +166,8 @@ int nextVariantIdx(int current)
 // =============================================================================
 //  applyCollisions
 // =============================================================================
+
+/*
 void applyCollisions(glm::vec3& pos, const RoomVariant& V)
 {
     constexpr float R = 0.2f; // radio del jugador
@@ -166,6 +217,82 @@ void applyCollisions(glm::vec3& pos, const RoomVariant& V)
         if      (lz > 13.0f) lx = glm::max(lx, -6.0f + R); // codo B
         else if (lz >  4.0f) lx = glm::max(lx,  1.0f + R); // pasillo recto B
         else                 lx = glm::max(lx, -4.0f + R); // habitación (norte)
+    }
+
+    pos.x = V.origin.x + lx;
+    pos.z = V.origin.z + lz;
+}*/
+
+void applyCollisions(glm::vec3& pos, const RoomVariant& V)
+{
+    constexpr float R = 0.2f; // radio del jugador
+
+    float lx = pos.x - V.origin.x;
+    float lz = pos.z - V.origin.z;
+
+    // --- Geometría dinámica ---
+    float hw = RW / 2.0f;                    // Mitad del ancho de la sala
+    float hd = RD / 2.0f;                    // Mitad de la profundidad de la sala
+    float cor_len = CL - CW;                 // Longitud del pasillo recto
+    float zDistNear = hd + cor_len;          // Inicio del codo (antiguo 13.0f)
+    float zDistFar = zDistNear + CW;         // Fondo del codo (antiguo 16.0f)
+
+    // Coordenadas X de las paredes de los pasillos
+    float xLeftWall_A = -hw;                // Antiguo -4.0f
+    float xRightWall_A = -hw + CW;           // Antiguo -1.0f
+    float xRightWall_B = hw;                 // Antiguo 4.0f
+    float xLeftWall_B = hw - CW;            // Antiguo 1.0f
+
+    // Punto medio Z para las colisiones de esquinas cóncavas
+    float midZ = (hd + zDistNear) / 2.0f;    // Antiguo 8.5f
+
+    // Techo absoluto de los fondos de los codos
+    lz = glm::clamp(lz, -zDistFar + R, zDistFar - R);
+
+    if (lz < 0.0f) {
+        // ─── Lado Sur (–Z): habitación → corredor A → codo A ──────────────────
+        lx = glm::max(lx, xLeftWall_A + R); // pared oeste continua
+
+        // Esquina cóncava a la derecha del pasillo A
+        if (lx > xRightWall_A - R && lz < -hd + R && lz > -zDistNear - R) {
+            float dX = lx - (xRightWall_A - R);
+            if (lz > -midZ) {
+                float dZ = (-hd + R) - lz;
+                if (dX < dZ) lx = xRightWall_A - R; else lz = -hd + R;
+            }
+            else {
+                float dZ = lz - (-zDistNear - R);
+                if (dX < dZ) lx = xRightWall_A - R; else lz = -zDistNear - R;
+            }
+        }
+
+        // Topes en X según el sector Z
+        if (lz < -zDistNear) lx = glm::min(lx, xRightWall_A - R); // codo A (tope en la pared interior)
+        else if (lz < -hd)        lx = glm::min(lx, xRightWall_A - R); // pasillo recto A
+        else                      lx = glm::min(lx, hw - R);           // habitación (sur)
+
+    }
+    else {
+        // ─── Lado Norte (+Z): habitación → corredor B → codo B ────────────────
+        lx = glm::min(lx, xRightWall_B - R); // pared este continua
+
+        // Esquina cóncava a la izquierda del pasillo B
+        if (lx < xLeftWall_B + R && lz > hd - R && lz < zDistNear + R) {
+            float dX = (xLeftWall_B + R) - lx;
+            if (lz < midZ) {
+                float dZ = lz - (hd - R);
+                if (dX < dZ) lx = xLeftWall_B + R; else lz = hd - R;
+            }
+            else {
+                float dZ = (zDistNear + R) - lz;
+                if (dX < dZ) lx = xLeftWall_B + R; else lz = zDistNear + R;
+            }
+        }
+
+        // Topes en X según el sector Z
+        if (lz > zDistNear) lx = glm::max(lx, xLeftWall_B + R); // codo B (tope en la pared interior)
+        else if (lz > hd)        lx = glm::max(lx, xLeftWall_B + R); // pasillo recto B
+        else                     lx = glm::max(lx, -hw + R);         // habitación (norte)
     }
 
     pos.x = V.origin.x + lx;

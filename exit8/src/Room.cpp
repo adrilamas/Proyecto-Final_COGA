@@ -5,7 +5,7 @@
 // =============================================================================
 //  buildRoom
 // =============================================================================
-Room buildRoom(glm::vec3 center, float w, float d, float h)
+/*Room buildRoom(glm::vec3 center, float w, float d, float h)
 {
     Room R;
     float hw = w / 2.f, hd = d / 2.f;
@@ -14,14 +14,41 @@ Room buildRoom(glm::vec3 center, float w, float d, float h)
     R.floor   = buildQuad(c + glm::vec3(-hw, 0,  hd), {1,0,0}, w, {0,0,-1}, d, {0,1,0}, w/2.f, d/2.f);
     R.ceiling = buildQuad(c + glm::vec3(-hw, h, -hd), {1,0,0}, w, {0,0, 1}, d, {0,-1,0}, w/2.f, d/2.f);
 
-    // Pared Norte (+Z): segmento sólido desde X=-4 hasta X=+1 (hueco en X=[1,4])
-    R.wN = buildQuad(c + glm::vec3(-hw, 0, hd), {1,0,0}, 5.f,  {0,1,0}, h, {0,0,-1}, 2.5f, h/2.f);
+    // Pared Norte (+Z): Sólido en X=[-4, 1], Hueco en X=[1, 4]
+    R.wN = buildQuad(c + glm::vec3(-4.f, 0, hd), { 1,0,0 }, 5.f, { 0,1,0 }, h, { 0,0,-1 }, 2.5f, h / 2.f);
 
-    // Pared Sur (-Z): segmento sólido desde X=-1 hasta X=+4 (hueco en X=[-4,-1])
-    R.wS = buildQuad(c + glm::vec3(-1.f, 0, -hd), {1,0,0}, 5.f, {0,1,0}, h, {0,0,1}, 2.5f, h/2.f);
+    // Pared Sur (-Z): Sólido en X=[-1, 4], Hueco en X=[-4, -1]
+    R.wS = buildQuad(c + glm::vec3(-1.f, 0, -hd), { 1,0,0 }, 5.f, { 0,1,0 }, h, { 0,0,1 }, 2.5f, h / 2.f);
 
     R.wE = buildQuad(c + glm::vec3( hw, 0, -hd), {0,0,1}, d,  {0,1,0}, h, {-1,0,0}, d/2.f, h/2.f);
     R.wW = buildQuad(c + glm::vec3(-hw, 0,  hd), {0,0,-1}, d, {0,1,0}, h, { 1,0,0}, d/2.f, h/2.f);
+
+    return R;
+}*/
+
+Room buildRoom(glm::vec3 center, float w, float d, float h)
+{
+    Room R;
+    float hw = w / 2.f;
+    float hd = d / 2.f;
+    glm::vec3 c = center;
+
+    R.floor = buildQuad(c + glm::vec3(-hw, 0, hd), { 1,0,0 }, w, { 0,0,-1 }, d, { 0,1,0 }, w / 2.f, d / 2.f);
+    R.ceiling = buildQuad(c + glm::vec3(-hw, h, -hd), { 1,0,0 }, w, { 0,0, 1 }, d, { 0,-1,0 }, w / 2.f, d / 2.f);
+
+    // Asumimos que CW (ancho del pasillo) es accesible aquí. Si no lo es, pásalo como parámetro.
+    float wallWidth = w - CW; // La parte sólida de la pared
+
+    // Pared Norte (+Z): Hueco en la derecha (X = hw)
+    float xNorthCenter = -hw + (wallWidth / 2.f);
+    R.wN = buildQuad(c + glm::vec3(-hw, 0, hd), { 1,0,0 }, wallWidth, { 0,1,0 }, h, { 0,0,-1 }, wallWidth / 2.f, h / 2.f);
+
+    // Pared Sur (-Z): Hueco en la izquierda (X = -hw)
+    float xSouthCenter = hw - (wallWidth / 2.f);
+    R.wS = buildQuad(c + glm::vec3(-hw + CW, 0, -hd), { 1,0,0 }, wallWidth, { 0,1,0 }, h, { 0,0,1 }, wallWidth / 2.f, h / 2.f);
+
+    R.wE = buildQuad(c + glm::vec3(hw, 0, -hd), { 0,0,1 }, d, { 0,1,0 }, h, { -1,0,0 }, d / 2.f, h / 2.f);
+    R.wW = buildQuad(c + glm::vec3(-hw, 0, hd), { 0,0,-1 }, d, { 0,1,0 }, h, { 1,0,0 }, d / 2.f, h / 2.f);
 
     return R;
 }

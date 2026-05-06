@@ -7,22 +7,22 @@ enum class CameraMovement { FORWARD, BACKWARD, LEFT, RIGHT };
 class Camera
 {
 public:
-    // ── Posicion y orientacion ──────────────────────────────────────────────
+    // Posicion y orientacion
     glm::vec3 Position;
     glm::vec3 Front;
     glm::vec3 Up;
     glm::vec3 Right;
     glm::vec3 WorldUp;
 
-    // ── Angulos de Euler ────────────────────────────────────────────────────
-    float Yaw;    // rotacion horizontal (izq/dcha)
-    float Pitch;  // rotacion vertical   (arriba/abajo)
+    // Ángulos Cámara
+    float Yaw;    // rotacion horizontal (izq/dcha) Theta
+    float Pitch;  // rotacion vertical   (arriba/abajo) Phi
 
-    // ── Parametros configurables ────────────────────────────────────────────
+    //Parametros
     float MovementSpeed;
     float MouseSensitivity;
-    float Fov;                // campo de vision en grados
-    float EyeHeight;          // altura del ojo sobre el suelo (metros)
+    float Fov;           
+    float EyeHeight;
 
     // Constructor: posicion inicial opcional
     Camera(glm::vec3 startPosition = glm::vec3(0.0f, 1.7f, 0.0f));
@@ -40,7 +40,6 @@ public:
     void ProcessMouseMovement(float xOffset, float yOffset,
                               bool constrainPitch = true);
 
-//private:
     // Recalcula Front, Right y Up a partir de Yaw y Pitch
     void UpdateCameraVectors();
 };
