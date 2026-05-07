@@ -136,6 +136,8 @@ int main()
     // ── Variantes ─────────────────────────────────────────────────────────────
     std::array<RoomVariant, NUM_VARIANTS> variants;
     variants[0] = buildVariant(0, AnomalyType::NONE);
+
+    //variants[1] = buildVariant(1, AnomalyType::NONE);
     variants[1] = buildVariant(1, AnomalyType::RED_LIGHTS);
 
     // ── Quad de fade ──────────────────────────────────────────────────────────
@@ -146,7 +148,15 @@ int main()
     applyAnomalyColors(variants[G.currentVariant].anomaly);
     activateLights(variants[G.currentVariant]);
     G.entryDir = EntryDir::FROM_A;
-    spawnAtCorridor(variants[G.currentVariant], true);
+
+    // Calculamos el trigger a la MITAD EXACTA DEL PASILLO
+    float init_cor_len = CL - CW;
+    float init_triggerDist = (RD / 2.0f) + (init_cor_len / 2.0f);
+
+    // Spawn inicial modificado
+    glm::vec3 fakePos = variants[G.currentVariant].origin + glm::vec3(-RW / 2.f + CW / 2.f, EYE, init_triggerDist);
+    spawnAtCorridor(variants[G.currentVariant], variants[G.currentVariant], true, fakePos, init_triggerDist);
+
 
     std::cout << "=========================================\n"
               << "  THE EXIT 8\n"
@@ -157,7 +167,7 @@ int main()
               << "[NIVEL 1] Anomalia: "
               << (G.currentAnomaly == AnomalyType::NONE ? "ninguna" : "LUCES ROJAS") << "\n";
 
-    // ── Bucle principal ───────────────────────────────────────────────────────
+    // ── Bucle principal
     while (!glfwWindowShouldClose(window))
     {
         float now = static_cast<float>(glfwGetTime());
@@ -166,53 +176,19 @@ int main()
 
         processInput(window);
         applyCollisions(camera.Position, variants[G.currentVariant]);
-/*
-        // ── Triggers de teleport ──────────────────────────────────────────────
-        if (G.state == GameState::PLAYING)
-{
-    const RoomVariant& V = variants[G.currentVariant];
-    float camZ = camera.Position.z;
 
-    // Trigger en el lado Norte (Z positivo)
-    if (camZ > V.origin.z + 12.0f) 
-    {
-        // Si viniste del lado A (Sur) y sigues hacia el Norte, vas "Adelante"
-        bool isRetreating = (G.entryDir == EntryDir::FROM_B); 
-        bool anomaly      = (G.currentAnomaly != AnomalyType::NONE);
-        bool correct      = isRetreating ? anomaly : !anomaly;
 
-        if (correct) G.score++; else G.score = 0;
-        
-        // Te mandamos al lado A (Sur) para que parezca que vienes de atrás
-        triggerTeleport(nextVariantIdx(G.currentVariant), true, correct);
-    } 
-    // Trigger en el lado Sur (Z negativo)
-    else if (camZ < V.origin.z - 12.0f) 
-    {
-        bool isRetreating = (G.entryDir == EntryDir::FROM_A);
-        bool anomaly      = (G.currentAnomaly != AnomalyType::NONE);
-        bool correct      = isRetreating ? anomaly : !anomaly;
-
-        if (correct) G.score++; else G.score = 0;
-
-        // Te mandamos al lado B (Norte)
-        triggerTeleport(nextVariantIdx(G.currentVariant), false, correct);
-    }
-}
-*/
-
-// ── Triggers de teleport ──────────────────────────────────────────────
+    // ── Triggers de teleport 
+        // ── Triggers de teleport 
         if (G.state == GameState::PLAYING)
         {
             const RoomVariant& V = variants[G.currentVariant];
             float camZ = camera.Position.z;
 
             float cor_len = CL - CW;
-            float zDistNear = (RD / 2.0f) + cor_len;
 
-            // Margen del trigger (3.5 unidades ANTES de la pared del codo)
-            float triggerMargin = 3.5f;
-            float triggerDist = zDistNear - triggerMargin;
+            // Trigger a la mitad del pasillo (borramos el margen de 3.5)
+            float triggerDist = (RD / 2.0f) + (cor_len / 2.0f);
 
             // Trigger en el lado Norte (Z positivo)
             if (camZ > V.origin.z + triggerDist)
@@ -238,36 +214,67 @@ int main()
             }
         }
 
-        // ── Actualizar fade ───────────────────────────────────────────────────
+        // ── Actualizar fade (AHORA ATÓMICO Y SEAMLESS) ────────────────────────
         if (G.state == GameState::FADING_OUT)
         {
-            G.fadeAlpha += G.FADE_SPEED * deltaTime;
-            if (G.fadeAlpha >= 1.0f) {
-                G.fadeAlpha = 1.0f;
-                if (G.pending.active) {
-                    G.currentVariant = G.pending.toVariant;
-                    applyAnomalyColors(variants[G.currentVariant].anomaly);
-                    activateLights(variants[G.currentVariant]);
-                    spawnAtCorridor(variants[G.currentVariant], G.pending.toCorA);
-                    G.entryDir       = G.pending.toCorA ? EntryDir::FROM_A : EntryDir::FROM_B;
-                    G.pending.active = false;
-                    std::cout << "[NIVEL " << G.score + 1 << "] Anomalia: "
-                              << (G.currentAnomaly == AnomalyType::NONE ? "ninguna" : "LUCES ROJAS")
-                              << "\n";
-                }
-                G.state = GameState::FADING_IN;
+            if (G.pending.active) {
+                int oldVariantIdx = G.currentVariant;
+                G.currentVariant = G.pending.toVariant;
+
+                float cor_len = CL - CW;
+
+                // Mismo cálculo exacto para pasárselo a la función de spawn
+                float current_main_triggerDist = (RD / 2.0f) + (cor_len / 2.0f);
+
+                applyAnomalyColors(variants[G.currentVariant].anomaly);
+                activateLights(variants[G.currentVariant]);
+
+                // [DEBUG] Guardamos la posición antes del salto
+                glm::vec3 posAntes = camera.Position;
+
+                // 1. Teletransportamos la cámara
+                spawnAtCorridor(variants[G.currentVariant], variants[oldVariantIdx], G.pending.toCorA, camera.Position, current_main_triggerDist);
+
+                // [DEBUG] Guardamos la posición después del salto
+                glm::vec3 posDespues = camera.Position;
+
+                // 2. ACTUALIZAMOS COLISIONES INMEDIATAMENTE
+                applyCollisions(camera.Position, variants[G.currentVariant]);
+
+                // 3. RESET VISUAL AL SHADER REAL
+                G.ambient = 0.15f;
+                glUseProgram(shader);
+                uploadLights(shader);
+
+                G.entryDir = G.pending.toCorA ? EntryDir::FROM_A : EntryDir::FROM_B;
+                G.pending.active = false;
+
+                // ── IMPRESIÓN DE DEBUG EN CONSOLA ──
+                std::cout << "\n[=== DEBUG TELEPORT ===]\n"
+                    << " Salto de Variante " << oldVariantIdx << " -> " << G.currentVariant << "\n"
+                    << " Destino: " << (G.pending.toCorA ? "Pasillo A (Sur / -Z)" : "Pasillo B (Norte / +Z)") << "\n"
+                    << " X (Lateral) : " << posAntes.x << "  ==>  " << posDespues.x << "\n"
+                    << " Z (Avance)  : " << posAntes.z << "  ==>  " << posDespues.z << "\n"
+                    << " Distancia de salto en Z: " << std::abs(posDespues.z - posAntes.z) << " unidades\n"
+                    << "========================\n\n";
+
+                std::cout << "[NIVEL " << G.score + 1 << "] Anomalia: "
+                    << (G.currentAnomaly == AnomalyType::NONE ? "ninguna" : "LUCES ROJAS")
+                    << "\n";
             }
+
+            // Saltamos directamente a PLAYING sin animación
+            G.fadeAlpha = 0.0f;
+            G.state = GameState::PLAYING;
         }
         else if (G.state == GameState::FADING_IN)
         {
-            G.fadeAlpha -= G.FADE_SPEED * deltaTime;
-            if (G.fadeAlpha <= 0.0f) {
-                G.fadeAlpha = 0.0f;
-                G.state     = GameState::PLAYING;
-            }
+            // Por seguridad, si de alguna forma entra aquí, lo mandamos a PLAYING
+            G.fadeAlpha = 0.0f;
+            G.state = GameState::PLAYING;
         }
 
-        // ── Render ────────────────────────────────────────────────────────────
+        // ── Render
         glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
