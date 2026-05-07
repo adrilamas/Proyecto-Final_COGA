@@ -17,12 +17,7 @@ void activateLights(const RoomVariant& V);
 // Coloca la cámara al inicio del corredor indicado mirando hacia la habitación.
 //   corA = true  → spawn en pasillo A (Z negativo), mirando hacia +Z
 //   corA = false → spawn en pasillo B (Z positivo), mirando hacia -Z
-void spawnAtCorridor(const RoomVariant& newV, const RoomVariant& oldV, bool toCorA, glm::vec3 currentCamPos, float triggerDist);
-
-// ── Teleport ──────────────────────────────────────────────────────────────────
-// Inicia la secuencia fade-out → teleport → fade-in.
-// No hace nada si el juego no está en estado PLAYING.
-void triggerTeleport(int toVariant, bool toCorA, bool isCorrect);
+void spawnAtCorridor(const RoomVariant& V, bool corA);
 
 // ── Variantes ─────────────────────────────────────────────────────────────────
 // Devuelve el índice de la siguiente variante, evitando repetir la actual.

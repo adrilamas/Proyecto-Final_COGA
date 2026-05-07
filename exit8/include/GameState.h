@@ -4,7 +4,8 @@
 #include "AnomalyType.h"
 
 // ── Estados de la máquina de juego ────────────────────────────────────────────
-enum class GameState { PLAYING, FADING_OUT, FADING_IN };
+// Sin fade: solo PLAYING. El teleport es instantáneo.
+enum class GameState { PLAYING };
 
 // Dirección por la que el jugador entró a la habitación actual.
 // Determina si "vuelve atrás" o "avanza" al cruzar el trigger.
@@ -21,18 +22,6 @@ struct GameData {
     int         currentVariant = 0;
     AnomalyType currentAnomaly = AnomalyType::NONE;
     EntryDir    entryDir       = EntryDir::FROM_A;
-
-    // Fade a negro
-    float       fadeAlpha      = 0.0f;
-    static constexpr float FADE_SPEED = 3.0f;
-
-    // Teleport pendiente (se ejecuta al terminar el fade)
-    struct PendingTeleport {
-        bool active    = false;
-        int  toVariant = 0;
-        bool toCorA    = true;  // true = spawn en corredor A, false = corredor B
-        bool isCorrect = true;
-    } pending;
 
     // Colores actuales de la habitación (los cambia applyAnomalyColors)
     glm::vec3 roomWall  = { 0.82f, 0.80f, 0.75f };

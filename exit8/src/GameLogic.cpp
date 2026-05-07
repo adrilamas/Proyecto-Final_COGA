@@ -44,68 +44,40 @@ void activateLights(const RoomVariant& V)
     const glm::vec3 corColor = { 0.95f, 0.95f, 1.0f };
     gNumLights = 0;
 
-    auto addLight = [&](glm::vec3 pos, glm::vec3 col) {
+    auto addLight = [&](glm::vec3 pos, glm::vec3 col,
+                        float Kc = 1.0f, float Kl = 0.09f, float Kq = 0.032f) {
         if (gNumLights >= MAX_LIGHTS) return;
         PointLight& L = gLights[gNumLights++];
         L.pos       = pos;
         L.color     = col;
         L.intensity = 1.0f;
-        L.Kc = 1.0f; L.Kl = 0.09f; L.Kq = 0.032f;
+        L.Kc = Kc; L.Kl = Kl; L.Kq = Kq;
+        L.isFlickering = false;
+        L.flickerTimer = 1.5f + (static_cast<float>(rand()) / RAND_MAX) * 4.5f;
     };
 
-    // Habitación
+    // ── Habitación ────────────────────────────────────────────────────────────
     for (auto& p : roomLightPositions(V.origin))
         addLight(p, G.lightCol);
 
-    // Pasillos rectos
+    // ── Pasillos rectos ───────────────────────────────────────────────────────
     for (auto& p : corridorLightPositions(V.corACenter, CL)) {
         glm::vec3 lp = p; lp.y = RH - 0.3f;
-        addLight(lp, corColor);
+        addLight(lp, corColor, 1.0f, 0.14f, 0.07f);
     }
     for (auto& p : corridorLightPositions(V.corBCenter, CL)) {
         glm::vec3 lp = p; lp.y = RH - 0.3f;
-        addLight(lp, corColor);
+        addLight(lp, corColor, 1.0f, 0.14f, 0.07f);
     }
 
-    // Focos sobre las esquinas de los codos
-    addLight(V.origin + glm::vec3( 1.0f, RH - 0.3f, -14.5f), corColor);
-    addLight(V.origin + glm::vec3(-1.0f, RH - 0.3f,  14.5f), corColor);
+    // ── Focos sobre las esquinas de los codos ─────────────────────────────────
+    addLight(V.origin + glm::vec3( 1.0f, RH - 0.3f, -14.5f), corColor, 1.0f, 0.14f, 0.07f);
+    addLight(V.origin + glm::vec3(-1.0f, RH - 0.3f,  14.5f), corColor, 1.0f, 0.14f, 0.07f);
 }
 
 // =============================================================================
 //  spawnAtCorridor
 // =============================================================================
-/*
-void spawnAtCorridor(const RoomVariant& V, bool corA)
-{
-    float hw = RW / 2.f;
-    float cor_len = CL - CW;
-    float zDistNear = (RD / 2.f) + cor_len;
-
-    // Mismos valores que usamos arriba para mantener la coherencia
-    float triggerMargin = 3.5f;
-
-    // Spawneamos 2 unidades MÁS CERCA de la habitación que el trigger, 
-    // así el jugador está 100% a salvo de auto-teletransportarse al aparecer.
-    float spawnOffsetZ = zDistNear - (triggerMargin + 2.0f);
-
-    // Centros X corregidos (A está en la Izquierda, B está en la Derecha)
-    float xCenter_A = -hw + (CW / 2.f);
-    float xCenter_B = hw - (CW / 2.f);
-
-    if (corA) {
-        // Pasillo A (Sur). Z es negativo.
-        camera.Position = V.origin + glm::vec3(xCenter_A, EYE, -spawnOffsetZ);
-    }
-    else {
-        // Pasillo B (Norte). Z es positivo.
-        camera.Position = V.origin + glm::vec3(xCenter_B, EYE, spawnOffsetZ);
-    }
-
-    camera.UpdateCameraVectors();
-    firstMouse = true;
-}*/
-
 // Necesitas añadir #include "GameLogic.h" o donde tengas activateLights y applyAnomalyColors
 void spawnAtCorridor(const RoomVariant& newV, const RoomVariant& oldV, bool toCorA, glm::vec3 currentCamPos, float main_triggerDist)
 {
@@ -150,18 +122,32 @@ void spawnAtCorridor(const RoomVariant& newV, const RoomVariant& oldV, bool toCo
     camera.UpdateCameraVectors();
 }
 
-// =============================================================================
-//  triggerTeleport
-// =============================================================================
-void triggerTeleport(int toVariant, bool toCorA, bool isCorrect)
+void spawnAtCorridor(const RoomVariant& V, bool corA)
 {
-    if (G.state != GameState::PLAYING) return;
-    G.state             = GameState::FADING_OUT;
-    G.fadeAlpha         = 0.0f;
-    G.pending.active    = true;
-    G.pending.toVariant = toVariant;
-    G.pending.toCorA    = toCorA;
-    G.pending.isCorrect = isCorrect;
+    float hw      = RW / 2.f;
+    float cor_len = CL - CW;
+    float zDistNear     = (RD / 2.f) + cor_len;
+    float triggerMargin = 3.5f;
+    // Spawneamos 2 unidades más cerca de la habitación que el trigger
+    // para que el jugador no se teletransporte nada más aparecer.
+    float spawnOffsetZ  = zDistNear - (triggerMargin + 2.0f);
+
+    float xCenter_A = -hw + (CW / 2.f);   // centro X del pasillo A (izquierda)
+    float xCenter_B =  hw - (CW / 2.f);   // centro X del pasillo B (derecha)
+
+    if (corA) {
+        // Pasillo A (Sur, Z negativo) → el jugador camina hacia +Z
+        camera.Position = V.origin + glm::vec3(xCenter_A, EYE, -spawnOffsetZ);
+        camera.Yaw      =  90.0f;   // mirando hacia +Z
+    } else {
+        // Pasillo B (Norte, Z positivo) → el jugador camina hacia -Z
+        camera.Position = V.origin + glm::vec3(xCenter_B, EYE, spawnOffsetZ);
+        camera.Yaw      = -90.0f;   // mirando hacia -Z
+    }
+
+    camera.Pitch = 0.0f;
+    camera.UpdateCameraVectors();
+    firstMouse = true;
 }
 
 // =============================================================================
@@ -174,37 +160,39 @@ int nextVariantIdx(int current)
     if (next == current) next = (current + 1) % NUM_VARIANTS;
     return next;
 }
-
-
+// =============================================================================
+//  applyCollisions
+// =============================================================================
 void applyCollisions(glm::vec3& pos, const RoomVariant& V)
 {
-    constexpr float R = 0.2f; // radio del jugador
+    constexpr float R = 0.2f;
 
     float lx = pos.x - V.origin.x;
     float lz = pos.z - V.origin.z;
 
     // --- Geometría dinámica ---
-    float hw = RW / 2.0f;                    // Mitad del ancho de la sala
-    float hd = RD / 2.0f;                    // Mitad de la profundidad de la sala
-    float cor_len = CL - CW;                 // Longitud del pasillo recto
+    float hw        = RW / 2.0f;             // Mitad del ancho de la sala
+    float hd        = RD / 2.0f;             // Mitad de la profundidad de la sala
+    float cor_len   = CL - CW;               // Longitud del pasillo recto
     float zDistNear = hd + cor_len;          // Inicio del codo (antiguo 13.0f)
-    float zDistFar = zDistNear + CW;         // Fondo del codo (antiguo 16.0f)
+    float zDistFar  = zDistNear + CW;        // Fondo del codo (antiguo 16.0f)
 
     // Coordenadas X de las paredes de los pasillos
-    float xLeftWall_A = -hw;                // Antiguo -4.0f
+    float xLeftWall_A  = -hw;                // Antiguo -4.0f
     float xRightWall_A = -hw + CW;           // Antiguo -1.0f
     float xRightWall_B = hw;                 // Antiguo 4.0f
-    float xLeftWall_B = hw - CW;            // Antiguo 1.0f
+    float xLeftWall_B  = hw - CW;            // Antiguo 1.0f
 
     // Punto medio Z para las colisiones de esquinas cóncavas
     float midZ = (hd + zDistNear) / 2.0f;    // Antiguo 8.5f
 
     // Techo absoluto de los fondos de los codos
+
     lz = glm::clamp(lz, -zDistFar + R, zDistFar - R);
 
     if (lz < 0.0f) {
-        // ─── Lado Sur (–Z): habitación → corredor A → codo A ──────────────────
-        lx = glm::max(lx, xLeftWall_A + R); // pared oeste continua
+        // ── Lado Sur (−Z): habitación → pasillo A → codo A ───────────────────
+        lx = glm::max(lx, xLeftWall_A + R);   // pared oeste continua
 
         // Esquina cóncava a la derecha del pasillo A
         if (lx > xRightWall_A - R && lz < -hd + R && lz > -zDistNear - R) {
@@ -212,22 +200,19 @@ void applyCollisions(glm::vec3& pos, const RoomVariant& V)
             if (lz > -midZ) {
                 float dZ = (-hd + R) - lz;
                 if (dX < dZ) lx = xRightWall_A - R; else lz = -hd + R;
-            }
-            else {
+            } else {
                 float dZ = lz - (-zDistNear - R);
                 if (dX < dZ) lx = xRightWall_A - R; else lz = -zDistNear - R;
             }
         }
 
-        // Topes en X según el sector Z
-        if (lz < -zDistNear) lx = glm::min(lx, xRightWall_A - R); // codo A (tope en la pared interior)
-        else if (lz < -hd)        lx = glm::min(lx, xRightWall_A - R); // pasillo recto A
-        else                      lx = glm::min(lx, hw - R);           // habitación (sur)
+        if      (lz < -zDistNear) lx = glm::min(lx, xRightWall_A - R);
+        else if (lz <  -hd)       lx = glm::min(lx, xRightWall_A - R);
+        else                      lx = glm::min(lx, hw - R);
 
-    }
-    else {
-        // ─── Lado Norte (+Z): habitación → corredor B → codo B ────────────────
-        lx = glm::min(lx, xRightWall_B - R); // pared este continua
+    } else {
+        // ── Lado Norte (+Z): habitación → pasillo B → codo B ─────────────────
+        lx = glm::min(lx, xRightWall_B - R);  // pared este continua
 
         // Esquina cóncava a la izquierda del pasillo B
         if (lx < xLeftWall_B + R && lz > hd - R && lz < zDistNear + R) {
@@ -235,17 +220,15 @@ void applyCollisions(glm::vec3& pos, const RoomVariant& V)
             if (lz < midZ) {
                 float dZ = lz - (hd - R);
                 if (dX < dZ) lx = xLeftWall_B + R; else lz = hd - R;
-            }
-            else {
+            } else {
                 float dZ = (zDistNear + R) - lz;
                 if (dX < dZ) lx = xLeftWall_B + R; else lz = zDistNear + R;
             }
         }
 
-        // Topes en X según el sector Z
-        if (lz > zDistNear) lx = glm::max(lx, xLeftWall_B + R); // codo B (tope en la pared interior)
-        else if (lz > hd)        lx = glm::max(lx, xLeftWall_B + R); // pasillo recto B
-        else                     lx = glm::max(lx, -hw + R);         // habitación (norte)
+        if      (lz > zDistNear) lx = glm::max(lx, xLeftWall_B + R);
+        else if (lz >  hd)       lx = glm::max(lx, xLeftWall_B + R);
+        else                     lx = glm::max(lx, -hw + R);
     }
 
     pos.x = V.origin.x + lx;
