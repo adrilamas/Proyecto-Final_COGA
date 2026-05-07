@@ -1,16 +1,21 @@
 cmake_minimum_required(VERSION 3.10)
 
-# 1. Ponle un nombre a tu proyecto
 project(Entrega2_OpenGL)
 
-# Actualizado a 14 para evitar tu error de compilación con las luces
 set(CMAKE_CXX_STANDARD 14) 
 
 include_directories(include)
 find_package(OpenGL REQUIRED)
 
-# 2. Tu ejecutable y archivos fuente
-add_executable(exit8 src/Camera.cpp src/main.cpp src/glad.c)
+set(CODIGO src/glad.c
+    src/Camera.cpp     
+    src/GameLogic.cpp          
+    src/Lighting.cpp
+    src/Mesh.cpp
+    src/Room.cpp
+    src/RoomVariant.cpp)
+
+add_executable(exit8 src/main.cpp ${CODIGO})
 
 # 3. Enlazado multiplataforma
 if(WIN32)
