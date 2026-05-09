@@ -2,99 +2,311 @@
 #include "Constants.h"
 #include <iostream>
 
+// =============================================================================
+//  Geometría del layout (vista desde arriba, lado A hacia –Z):
+//
+//   X →
+//   ↑ Z=0 (centro sala)
+//
+//   La sala ocupa X ∈ [–RW/2, +RW/2], Z ∈ [–RD/2, +RD/2]
+//
+//   Corredor A (lado oeste, sale hacia –Z):
+//     Tramo A1: X ∈ [–RW/2, –RW/2+CW],  Z ∈ [–RD/2–CL1, –RD/2]
+//     Giro  A1: cuadrado CW×CW en la esquina X∈[–RW/2,–RW/2+CW], Z∈[–RD/2–CL1–CW, –RD/2–CL1]
+//     Tramo A2: X ∈ [–RW/2–CL2, –RW/2], Z ∈ [–RD/2–CL1–CW, –RD/2–CL1]   (hacia –X)
+//     Giro  A2: cuadrado CW×CW en X∈[–RW/2–CL2–CW, –RW/2–CL2], Z∈[–RD/2–CL1–CW, –RD/2–CL1]
+//     Tramo A3: X ∈ [–RW/2–CL2–CW, –RW/2–CL2], Z ∈ [–RD/2–CL1–CW–CL3, –RD/2–CL1–CW]
+//     TRIGGER a Z = –(RD/2 + CL1 + CW + CL3/2)
+//
+//   Corredor B es el espejo exacto hacia +Z (esquina este).
+// =============================================================================
+
+// Alias útiles
+static inline float hw() { return RW / 2.f; }
+static inline float hd() { return RD / 2.f; }
 
 // =============================================================================
-//  buildVariant
-// =============================================================================
-
 RoomVariant buildVariant(int variantIdx, AnomalyType anomaly)
+// =============================================================================
 {
     RoomVariant V;
     V.anomaly = anomaly;
-    V.origin = glm::vec3(variantIdx * VARIANT_STRIDE, 0.0f, 0.0f);
+    V.origin  = glm::vec3(variantIdx * VARIANT_STRIDE, 0.f, 0.f);
     glm::vec3 o = V.origin;
 
-    // ── Habitación central ────────────────────────────────────────────────────
+    const float HW = hw();
+    const float HD = hd();
+
+    // ── Sala principal ────────────────────────────────────────────────────────
     V.room = buildRoom(o, RW, RD, RH);
 
-    float hw = RW / 2.f;
-    float hd = RD / 2.f;
-    float cor_len = CL - CW;
-    float zDistNear = hd + cor_len;  // Inicio del codo
-    float zDistFar = zDistNear + CW; // Fondo del codo
+    // =========================================================================
+    //  LADO A  (corredor en la esquina OESTE–SUR, sale hacia –Z)
+    // =========================================================================
+    //
+    //  Columna X del corredor A: [–HW, –HW+CW]
+    //  Z decrece conforme avanzamos.
+    //
+    const float axL = -HW;          // pared izquierda del corredor A (oeste)
+    const float axR = -HW + CW;     // pared derecha  del corredor A (interior)
 
-    // Posiciones exactas en X de las paredes de los pasillos
-    float xLeftWall_A = -hw;
-    float xRightWall_A = -hw + CW;
-    float xRightWall_B = hw;
-    float xLeftWall_B = hw - CW;
+    // --- Tramo A1 (hacia –Z) -------------------------------------------------
+    // Z ∈ [–HD–CL1, –HD]
+    float zA1near = -HD;
+    float zA1far  = -HD - CL1;
+    glm::vec3 cA1center = o + glm::vec3((axL+axR)/2.f, 0.f, (zA1near+zA1far)/2.f);
+    V.corA1 = buildCorridorZ(cA1center, CL1, CW, RH);
+    V.corA1Center = cA1center;
 
-    float elbow_len = 10.0f; // La longitud de los codos laterales hacia X
+    // --- Giro A1 (codo 90° de –Z hacia –X) ----------------------------------
+    // Ocupa X ∈ [axL, axR], Z ∈ [zA1far–CW, zA1far]
+    float zA1c_near = zA1far;
+    float zA1c_far  = zA1far - CW;  // el codo se extiende CW en Z
+    // Suelo del codo
+    V.elbowA1floor = buildQuad(
+        o + glm::vec3(axL,  0.f, zA1c_near),
+        {1,0,0}, CW, {0,0,-1}, CW, {0,1,0}, CW/2.f, CW/2.f);
+    // Techo del codo
+    V.elbowA1ceil = buildQuad(
+        o + glm::vec3(axL, RH, zA1c_far),
+        {1,0,0}, CW, {0,0, 1}, CW, {0,-1,0}, CW/2.f, CW/2.f);
+    // Pared exterior del codo (la que queda al sur, Z = zA1c_far)
+    V.elbowA1wallOuter = buildQuad(
+        o + glm::vec3(axL,  0.f, zA1c_far),
+        {1,0,0}, CW, {0,1,0}, RH, {0,0, 1}, CW/2.f, RH/2.f);
+    // Pared interior del codo (la que queda al este, X = axR) – sólo el trozo del giro
+    V.elbowA1wallInner = buildQuad(
+        o + glm::vec3(axR,  0.f, zA1c_far),
+        {0,0, 1}, CW, {0,1,0}, RH, {-1,0,0}, CW/2.f, RH/2.f);
 
-    // ── Pasillo A – esquina SO, sale hacia –Z ─────────────────────────────────
-    // AHORA SÍ ESTÁ EN LA IZQUIERDA (-X)
-    V.corACenter = o + glm::vec3(xLeftWall_A + (CW / 2.f), 0.f, -(hd + cor_len / 2.f));
-    V.corA = buildCorridorZ(V.corACenter, cor_len, CW, RH);
+    // --- Tramo A2 (hacia –X) -------------------------------------------------
+    // X ∈ [axL–CL2, axL],  Z ∈ [zA1c_far, zA1c_near]  (altura fija)
+    float xA2far  = axL - CL2;
+    float xA2near = axL;
+    glm::vec3 cA2center = o + glm::vec3((xA2far+xA2near)/2.f, 0.f, (zA1c_far+zA1c_near)/2.f);
+    // buildCorridorZ trabaja en Z; aquí el corredor va en X, así que lo
+    // construimos como un corredor en X usando buildQuad directamente.
+    {
+        float len  = CL2;
+        float w    = CW;
+        float zLo  = zA1c_far;
+        float zHi  = zA1c_near;
+        float xNear= xA2near;
+        float xFar = xA2far;
+        // Suelo: corre en X desde xFar hasta xNear, ancho CW en Z
+        V.corA2.floor = buildQuad(
+            o + glm::vec3(xFar, 0.f, zLo),
+            {1,0,0}, len, {0,0,1}, w, {0,1,0}, len/2.f, w/2.f);
+        // Techo
+        V.corA2.ceiling = buildQuad(
+            o + glm::vec3(xFar, RH, zHi),
+            {1,0,0}, len, {0,0,-1}, w, {0,-1,0}, len/2.f, w/2.f);
+        // Pared norte (Z = zHi = zA1c_near): cara interior –Z
+        V.corA2.wLeft = buildQuad(
+            o + glm::vec3(xFar, 0.f, zHi),
+            {1,0,0}, len, {0,1,0}, RH, {0,0,-1}, len/2.f, RH/2.f);
+        // Pared sur (Z = zLo = zA1c_far): cara interior +Z
+        V.corA2.wRight = buildQuad(
+            o + glm::vec3(xFar, 0.f, zLo),
+            {1,0,0}, len, {0,1,0}, RH, {0,0, 1}, len/2.f, RH/2.f);
+    }
+    V.corA2Center = cA2center;
 
-    // Codo A (gira hacia -X)
-    V.corATurn.floor = buildQuad(o + glm::vec3(xRightWall_A, 0, -zDistNear), { -1,0,0 }, elbow_len, { 0,0,-1 }, CW, { 0,1,0 }, elbow_len / 2.f, CW / 2.f);
-    V.corATurn.ceiling = buildQuad(o + glm::vec3(xRightWall_A, RH, -zDistFar), { -1,0,0 }, elbow_len, { 0,0, 1 }, CW, { 0,-1,0 }, elbow_len / 2.f, CW / 2.f);
-    V.corATurn.wLeft = buildQuad(o + glm::vec3(xRightWall_A, 0, -zDistFar), { -1,0,0 }, elbow_len, { 0,1,0 }, RH, { 0,0, 1 }, elbow_len / 2.f, RH / 2.f);
-    V.corATurn.wRight = buildQuad(o + glm::vec3(xLeftWall_A, 0, -zDistNear), { -1,0,0 }, elbow_len - CW, { 0,1,0 }, RH, { 0,0,-1 }, (elbow_len - CW) / 2.f, RH / 2.f);
+    // --- Giro A2 (codo 90° de –X vuelve a –Z) --------------------------------
+    // Ocupa X ∈ [xA2far–CW, xA2far], Z ∈ [zA1c_far, zA1c_near]
+    float xA2c_near = xA2far;
+    float xA2c_far  = xA2far - CW;
+    float zA2c_near = zA1c_near;  // = zA1far
+    float zA2c_far  = zA1c_far;   // = zA1far–CW
+    V.elbowA2floor = buildQuad(
+        o + glm::vec3(xA2c_far, 0.f, zA2c_far),
+        {1,0,0}, CW, {0,0,1}, CW, {0,1,0}, CW/2.f, CW/2.f);
+    V.elbowA2ceil = buildQuad(
+        o + glm::vec3(xA2c_far, RH, zA2c_near),
+        {1,0,0}, CW, {0,0,-1}, CW, {0,-1,0}, CW/2.f, CW/2.f);
+    // Pared norte del codo (Z = zA2c_near): cierra el corredor A2 por el norte
+    V.elbowA2wallOuter = buildQuad(
+        o + glm::vec3(xA2c_far, 0.f, zA2c_near),
+        {1,0,0}, CW, {0,1,0}, RH, {0,0,-1}, CW/2.f, RH/2.f);
+    // Pared oeste del codo (X = xA2c_far): cierra el codo por la izquierda
+    V.elbowA2wallInner = buildQuad(
+        o + glm::vec3(xA2c_far, 0.f, zA2c_far),
+        {0,0,1}, CW, {0,1,0}, RH, {1,0,0}, CW/2.f, RH/2.f);
 
-    V.cornerWallA = buildQuad(o + glm::vec3(xRightWall_A, 0, -zDistNear), { 0,0,-1 }, CW, { 0,1,0 }, RH, { -1,0,0 }, CW / 2.f, RH / 2.f);
-    V.endWallA = buildQuad(o + glm::vec3(xRightWall_A - elbow_len, 0, -zDistFar), { 0,0, 1 }, CW, { 0,1,0 }, RH, { 1,0,0 }, CW / 2.f, RH / 2.f);
+    // --- Tramo A3 (hacia –Z de nuevo) ----------------------------------------
+    // X ∈ [xA2c_far, xA2c_near], Z ∈ [zA2c_far–CL3, zA2c_far]
+    float zA3near = zA2c_far;
+    float zA3far  = zA2c_far - CL3;
+    glm::vec3 cA3center = o + glm::vec3((xA2c_far+xA2c_near)/2.f, 0.f, (zA3near+zA3far)/2.f);
+    V.corA3 = buildCorridorZ(cA3center, CL3, CW, RH);
+    V.corA3Center = cA3center;
 
-    // ── Pasillo B – esquina NE, sale hacia +Z ─────────────────────────────────
-    // AHORA SÍ ESTÁ EN LA DERECHA (+X)
-    V.corBCenter = o + glm::vec3(xLeftWall_B + (CW / 2.f), 0.f, (hd + cor_len / 2.f));
-    V.corB = buildCorridorZ(V.corBCenter, cor_len, CW, RH);
+    // Pared de cierre al fondo del tramo A3
+    V.endWallA = buildQuad(
+        o + glm::vec3(xA2c_far, 0.f, zA3far),
+        {1,0,0}, CW, {0,1,0}, RH, {0,0,1}, CW/2.f, RH/2.f);
 
-    // Codo B (gira hacia +X)
-    V.corBTurn.floor = buildQuad(o + glm::vec3(xLeftWall_B, 0, zDistNear), { 1,0,0 }, elbow_len, { 0,0, 1 }, CW, { 0,1,0 }, elbow_len / 2.f, CW / 2.f);
-    V.corBTurn.ceiling = buildQuad(o + glm::vec3(xLeftWall_B, RH, zDistFar), { 1,0,0 }, elbow_len, { 0,0,-1 }, CW, { 0,-1,0 }, elbow_len / 2.f, CW / 2.f);
-    V.corBTurn.wLeft = buildQuad(o + glm::vec3(xLeftWall_B, 0, zDistFar), { 1,0,0 }, elbow_len, { 0,1,0 }, RH, { 0,0,-1 }, elbow_len / 2.f, RH / 2.f);
-    V.corBTurn.wRight = buildQuad(o + glm::vec3(xRightWall_B, 0, zDistNear), { 1,0,0 }, elbow_len - CW, { 0,1,0 }, RH, { 0,0, 1 }, (elbow_len - CW) / 2.f, RH / 2.f);
+    // Trigger: a mitad del tramo A3 (en Z absoluto)
+    // Como está desplazado en X, usamos solo la coordenada Z del trigger.
+    float trigZ_A = zA3near + (zA3far - zA3near) * 0.5f; // negativo
+    // triggerDist es la distancia desde origin.z al punto de trigger en Z
+    V.triggerDist = -trigZ_A + o.z; // distancia positiva
 
-    V.cornerWallB = buildQuad(o + glm::vec3(xLeftWall_B, 0, zDistNear), { 0,0, 1 }, CW, { 0,1,0 }, RH, { 1,0,0 }, CW / 2.f, RH / 2.f);
-    V.endWallB = buildQuad(o + glm::vec3(xLeftWall_B + elbow_len, 0, zDistFar), { 0,0,-1 }, CW, { 0,1,0 }, RH, { -1,0,0 }, CW / 2.f, RH / 2.f);
+    // =========================================================================
+    //  LADO B  (corredor en la esquina ESTE–NORTE, sale hacia +Z)
+    //  Espejo exacto de A respecto al centro de la sala.
+    // =========================================================================
+    //
+    //  Columna X del corredor B: [+HW–CW, +HW]
+    //
+    const float bxL = HW - CW;
+    const float bxR = HW;
+
+    // --- Tramo B1 (hacia +Z) -------------------------------------------------
+    float zB1near = HD;
+    float zB1far  = HD + CL1;
+    glm::vec3 cB1center = o + glm::vec3((bxL+bxR)/2.f, 0.f, (zB1near+zB1far)/2.f);
+    V.corB1 = buildCorridorZ(cB1center, CL1, CW, RH);
+    V.corB1Center = cB1center;
+
+    // --- Giro B1 (codo 90° de +Z hacia +X) ----------------------------------
+    float zB1c_near = zB1far;
+    float zB1c_far  = zB1far + CW;
+    V.elbowB1floor = buildQuad(
+        o + glm::vec3(bxL, 0.f, zB1c_near),
+        {1,0,0}, CW, {0,0,1}, CW, {0,1,0}, CW/2.f, CW/2.f);
+    V.elbowB1ceil = buildQuad(
+        o + glm::vec3(bxL, RH, zB1c_far),
+        {1,0,0}, CW, {0,0,-1}, CW, {0,-1,0}, CW/2.f, CW/2.f);
+    // Pared exterior (Z = zB1c_far, cara –Z)
+    V.elbowB1wallOuter = buildQuad(
+        o + glm::vec3(bxL, 0.f, zB1c_far),
+        {1,0,0}, CW, {0,1,0}, RH, {0,0,-1}, CW/2.f, RH/2.f);
+    // Pared interior (X = bxL, cara +X)
+    V.elbowB1wallInner = buildQuad(
+        o + glm::vec3(bxL, 0.f, zB1c_near),
+        {0,0,1}, CW, {0,1,0}, RH, {1,0,0}, CW/2.f, RH/2.f);
+
+    // --- Tramo B2 (hacia +X) -------------------------------------------------
+    float xB2near = bxR;
+    float xB2far  = bxR + CL2;
+    {
+        float len  = CL2;
+        float w    = CW;
+        float zLo  = zB1c_near;
+        float zHi  = zB1c_far;
+        V.corB2.floor = buildQuad(
+            o + glm::vec3(xB2near, 0.f, zLo),
+            {1,0,0}, len, {0,0,1}, w, {0,1,0}, len/2.f, w/2.f);
+        V.corB2.ceiling = buildQuad(
+            o + glm::vec3(xB2near, RH, zHi),
+            {1,0,0}, len, {0,0,-1}, w, {0,-1,0}, len/2.f, w/2.f);
+        // Pared sur (Z = zLo): cara interior +Z
+        V.corB2.wLeft = buildQuad(
+            o + glm::vec3(xB2near, 0.f, zLo),
+            {1,0,0}, len, {0,1,0}, RH, {0,0, 1}, len/2.f, RH/2.f);
+        // Pared norte (Z = zHi): cara interior –Z
+        V.corB2.wRight = buildQuad(
+            o + glm::vec3(xB2near, 0.f, zHi),
+            {1,0,0}, len, {0,1,0}, RH, {0,0,-1}, len/2.f, RH/2.f);
+    }
+    V.corB2Center = o + glm::vec3((xB2near+xB2far)/2.f, 0.f, (zB1c_near+zB1c_far)/2.f);
+
+    // --- Giro B2 (codo 90° de +X vuelve a +Z) --------------------------------
+    float xB2c_near = xB2far;
+    float xB2c_far  = xB2far + CW;
+    float zB2c_low  = zB1c_near;
+    float zB2c_high = zB1c_far;
+    V.elbowB2floor = buildQuad(
+        o + glm::vec3(xB2c_near, 0.f, zB2c_low),
+        {1,0,0}, CW, {0,0,1}, CW, {0,1,0}, CW/2.f, CW/2.f);
+    V.elbowB2ceil = buildQuad(
+        o + glm::vec3(xB2c_near, RH, zB2c_high),
+        {1,0,0}, CW, {0,0,-1}, CW, {0,-1,0}, CW/2.f, CW/2.f);
+    // Pared sur del codo (Z = zB2c_low): cara interior +Z
+    V.elbowB2wallOuter = buildQuad(
+        o + glm::vec3(xB2c_near, 0.f, zB2c_low),
+        {1,0,0}, CW, {0,1,0}, RH, {0,0, 1}, CW/2.f, RH/2.f);
+    // Pared este del codo (X = xB2c_far): cierra el codo por la derecha
+    V.elbowB2wallInner = buildQuad(
+        o + glm::vec3(xB2c_far, 0.f, zB2c_high),
+        {0,0,-1}, CW, {0,1,0}, RH, {-1,0,0}, CW/2.f, RH/2.f);
+
+    // --- Tramo B3 (hacia +Z de nuevo) ----------------------------------------
+    float zB3near = zB2c_high;
+    float zB3far  = zB2c_high + CL3;
+    glm::vec3 cB3center = o + glm::vec3((xB2c_near+xB2c_far)/2.f, 0.f, (zB3near+zB3far)/2.f);
+    V.corB3 = buildCorridorZ(cB3center, CL3, CW, RH);
+    V.corB3Center = cB3center;
+
+    // Pared de cierre al fondo del tramo B3
+    V.endWallB = buildQuad(
+        o + glm::vec3(xB2c_near, 0.f, zB3far),
+        {1,0,0}, CW, {0,1,0}, RH, {0,0,-1}, CW/2.f, RH/2.f);
+
+    // Comprobamos consistencia: triggerDist debe ser la misma para A y B
+    float trigZ_B = zB3near + (zB3far - zB3near) * 0.5f; // positivo
+    // triggerDist ya calculado por A; verificamos coincidencia aproximada
+    // (son geométricamente simétricos así que deben ser iguales)
+
+    // ── Paredes de cierre entre sala y pasillos ───────────────────────────────
+    // La sala tiene abertura de ancho CW en la pared Norte (+Z, lado B)
+    // y en la pared Sur (–Z, lado A).
+    // Las paredes de la sala ya tienen hueco (ver buildRoom), pero hay que
+    // tapar el tramo sólido que queda entre el hueco del pasillo y el borde.
+
+    // Gap pared Norte (la sala tiene el hueco del corredor B a la derecha)
+    // El corredor B sale desde X∈[bxL,bxR] = [HW-CW, HW]
+    // La pared norte sólida ocupa X∈[–HW, HW–CW]  (ya la crea buildRoom)
+    // No necesitamos geo extra aquí porque buildRoom ya genera paredes parciales.
 
     if (variantIdx == 0) {
-        std::cout << "\n[=== GEOMETRIA DEL MAPA (Variante 0) ===]\n";
-        std::cout << " Centro del mapa (Origen): " << o.x << ", " << o.y << ", " << o.z << "\n";
-        std::cout << " Limite Izquierdo Pasillo A: " << xLeftWall_A << "\n";
-        std::cout << " Limite Derecho Pasillo A : " << xRightWall_A << "\n";
-        std::cout << " Limite Izquierdo Pasillo B: " << xLeftWall_B << "\n";
-        std::cout << " Limite Derecho Pasillo B : " << xRightWall_B << "\n";
-        std::cout << "=========================================\n\n";
+        std::cout << "\n[=== GEOMETRIA (Variante 0) ===]\n"
+                  << " Sala: X[" << -HW << "," << HW << "]  Z[" << -HD << "," << HD << "]\n"
+                  << " Corredor A: columna X[" << axL << "," << axR << "]\n"
+                  << "   Tramo A1: Z[" << zA1far  << "," << zA1near  << "]\n"
+                  << "   Tramo A2: X[" << xA2far  << "," << xA2near << "]\n"
+                  << "   Tramo A3: Z[" << zA3far  << "," << zA3near << "]\n"
+                  << " Trigger A en Z=" << trigZ_A + o.z << " (dist=" << V.triggerDist << ")\n"
+                  << " Corredor B: columna X[" << bxL << "," << bxR << "]\n"
+                  << "   Tramo B3: Z[" << zB3near << "," << zB3far  << "]\n"
+                  << " Trigger B en Z=" << trigZ_B + o.z << "\n"
+                  << "===============================\n\n";
     }
 
     return V;
 }
 
 // =============================================================================
-//  roomLightPositions
-// =============================================================================
 std::vector<glm::vec3> roomLightPositions(glm::vec3 origin)
+// =============================================================================
 {
-    float y = RH - 0.3f;
+    float y = RH - 0.4f;
+    float hW = hw() * 0.5f;
+    float hD = hd() * 0.5f;
     return {
-        origin + glm::vec3(-RW / 4.f, y, -RD / 4.f),
-        origin + glm::vec3( RW / 4.f, y, -RD / 4.f),
-        origin + glm::vec3(-RW / 4.f, y,  RD / 4.f),
-        origin + glm::vec3( RW / 4.f, y,  RD / 4.f),
+        origin + glm::vec3(-hW, y, -hD),
+        origin + glm::vec3( hW, y, -hD),
+        origin + glm::vec3(-hW, y,  hD),
+        origin + glm::vec3( hW, y,  hD),
     };
 }
 
 // =============================================================================
-//  corridorLightPositions
+std::vector<glm::vec3> corridorLightPositions(glm::vec3 center, float len, bool alongZ)
 // =============================================================================
-std::vector<glm::vec3> corridorLightPositions(glm::vec3 corridorCenter, float len)
 {
-    float y = RH - 0.3f;
-    return {
-        corridorCenter + glm::vec3(0.f, y - corridorCenter.y, -len / 3.f),
-        corridorCenter + glm::vec3(0.f, y - corridorCenter.y,  0.0f),
-        corridorCenter + glm::vec3(0.f, y - corridorCenter.y,  len / 3.f),
-    };
+    float y = RH - 0.4f;
+    std::vector<glm::vec3> pts;
+    int n = glm::max(2, (int)(len / 5.f)); // una luz cada ~5 unidades
+    for (int i = 0; i < n; ++i) {
+        float t = (i + 0.5f) / n;           // mitad de cada segmento
+        float off = (t - 0.5f) * len;
+        glm::vec3 p = center;
+        p.y = center.y + y;                 // elevamos a la altura del techo
+        if (alongZ) p.z += off;
+        else        p.x += off;
+        pts.push_back(p);
+    }
+    return pts;
 }

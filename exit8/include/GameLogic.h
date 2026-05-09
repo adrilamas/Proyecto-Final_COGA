@@ -4,25 +4,19 @@
 #include "GameState.h"
 #include "RoomVariant.h"
 
-// ── Anomalías ─────────────────────────────────────────────────────────────────
-// Aplica los colores de sala y luces que corresponden a la anomalía dada,
-// actualizando los campos de G (GameData global).
+// Aplica colores y ambiente según la anomalía.
 void applyAnomalyColors(AnomalyType a);
 
-// ── Luces ─────────────────────────────────────────────────────────────────────
-// Recalcula y sube al banco de luces todas las fuentes de la variante dada.
+// Recalcula y sube al banco de luces todas las fuentes de la variante.
 void activateLights(const RoomVariant& V);
 
-// ── Spawn ─────────────────────────────────────────────────────────────────────
-// Coloca la cámara al inicio del corredor indicado mirando hacia la habitación.
+// Coloca la cámara al inicio del corredor indicado mirando hacia la sala.
 //   corA = true  → spawn en pasillo A (Z negativo), mirando hacia +Z
 //   corA = false → spawn en pasillo B (Z positivo), mirando hacia -Z
 void spawnAtCorridor(const RoomVariant& V, bool corA);
 
-// ── Variantes ─────────────────────────────────────────────────────────────────
-// Devuelve el índice de la siguiente variante, evitando repetir la actual.
+// Devuelve el índice de la siguiente variante (diferente a current).
 int nextVariantIdx(int current);
 
-// ── Colisiones ────────────────────────────────────────────────────────────────
-// Restringe pos a los límites geométricos de la variante V.
+// Restringe la posición a los límites geométricos de la variante.
 void applyCollisions(glm::vec3& pos, const RoomVariant& V);

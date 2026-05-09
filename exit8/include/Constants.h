@@ -5,29 +5,24 @@ static constexpr int   SCR_WIDTH       = 1280;
 static constexpr int   SCR_HEIGHT      = 720;
 
 // ── Geometría de habitación ───────────────────────────────────────────────────
-static constexpr float RW              = 20.0f;   // ancho  (X)
-static constexpr float RD              = 3.0f;   // fondo  (Z)
-static constexpr float RH              = 3.5f;   // altura (Y)
-static constexpr float CW              = 3.0f;   // ancho del corredor
-static constexpr float CL              =12.0f;  // longitud total de cada corredor
-static constexpr float EYE             = 1.7f;   // altura de los ojos del jugador
+static constexpr float RW              = 20.0f;   // ancho  (X)  – sala principal
+static constexpr float RD              = 4.0f;    // fondo  (Z)  – sala principal
+static constexpr float RH              = 4.5f;    // altura (Y)  – toda la escena
+static constexpr float CW              = 4.0f;    // ancho del corredor (más amplio)
+
+// Longitudes de los tramos del camino (en unidades de mundo):
+//   Tramo 1: pasillo recto desde la sala hacia el primer giro
+static constexpr float CL1             = 10.0f;
+//   Tramo 2: pasillo tras el primer giro (perpendicular)
+static constexpr float CL2             = 8.0f;
+//   Tramo 3: pasillo tras el segundo giro (parallel de vuelta)
+static constexpr float CL3             = 14.0f;   // el trigger está a mitad de este
+
+static constexpr float EYE             = 1.8f;    // altura de los ojos del jugador
 
 // ── Variantes ─────────────────────────────────────────────────────────────────
-// Desplazamiento en X entre variantes (debe ser >> RW + 2*CL)
-static constexpr float VARIANT_STRIDE  = 200.0f;
+static constexpr float VARIANT_STRIDE  = 300.0f;  // separación en X entre variantes
 static constexpr int   NUM_VARIANTS    = 2;
-
-// ── Offsets de corredor (relativo al centro de la habitación) ─────────────────
-static constexpr float COR_A_DX = -(RW / 2.0f - CW / 2.0f);  // -2.5 (esquina oeste)
-static constexpr float COR_B_DX =  (RW / 2.0f - CW / 2.0f);  // +2.5 (esquina este)
-
-// ── Triggers (relativo al centro de la habitación) ────────────────────────────
-static constexpr float TRIG_A_DZ = -(RD / 2.0f + CL * 0.5f); // -10.0
-static constexpr float TRIG_B_DZ =  (RD / 2.0f + CL * 0.5f); // +10.0
-
-// ── Spawns (relativo al centro de la habitación) ──────────────────────────────
-static constexpr float SPAWN_A_DZ = -(RD / 2.0f + CL * 0.15f); // -5.2
-static constexpr float SPAWN_B_DZ =  (RD / 2.0f + CL * 0.15f); // +5.2
 
 // ── Luces ─────────────────────────────────────────────────────────────────────
 static constexpr int MAX_LIGHTS = 16;

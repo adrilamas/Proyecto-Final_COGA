@@ -1,17 +1,8 @@
 // =============================================================================
 //  main.cpp  ─  The Exit 8
-//  · Teleport INSTANTÁNEO (sin fade)
-//  · Tres texturas tileable: paredes, suelo, techo
-//  · Carga con stb_image (coloca stb_image.h en la carpeta del proyecto)
-// =============================================================================
-//
-//  ARCHIVOS DE TEXTURA ESPERADOS (junto al ejecutable):
-//    tex_wall.jpg   – textura tileable para paredes
-//    tex_floor.jpg  – textura tileable para suelo
-//    tex_ceil.jpg   – textura tileable para techo
-//
-//  Si alguna falta, ese elemento se renderiza con el color sólido de siempre.
-//
+//  · Pasillo en forma de Z con dos giros antes del trigger
+//  · Anomalías aleatorias y extensibles
+//  · Teleport instantáneo
 // =============================================================================
 
 #include <glad/glad.h>
@@ -25,8 +16,6 @@
 #include <ctime>
 #include <array>
 
-// stb_image – cabecera de una sola unidad de compilación
-// Solo se define STB_IMAGE_IMPLEMENTATION una vez (aquí, en main.cpp).
 #define STB_IMAGE_IMPLEMENTATION
 #include <BibliotecasCurso/stb_image.h>
 
@@ -41,101 +30,69 @@
 #include "Camera.h"
 
 // =============================================================================
-//  Globales compartidos con otros módulos mediante extern
+//  Globales
 // =============================================================================
 GameData G;
-
-Camera camera(glm::vec3(0.0f, EYE, 0.0f));
-float  lastX      = SCR_WIDTH  / 2.0f;
-float  lastY      = SCR_HEIGHT / 2.0f;
-bool   firstMouse = true;
-float  deltaTime  = 0.0f;
-float  lastFrame  = 0.0f;
+Camera   camera(glm::vec3(0.f, EYE, 0.f));
+float    lastX      = SCR_WIDTH  / 2.f;
+float    lastY      = SCR_HEIGHT / 2.f;
+bool     firstMouse = true;
+float    deltaTime  = 0.f;
+float    lastFrame  = 0.f;
 
 // =============================================================================
-//  Prototipos de callbacks
+//  Prototipos
 // =============================================================================
 void framebufferSizeCallback(GLFWwindow*, int w, int h);
-void mouseCallback           (GLFWwindow*, double xI, double yI);
+void mouseCallback           (GLFWwindow*, double x, double y);
 void scrollCallback          (GLFWwindow*, double, double yO);
 void processInput            (GLFWwindow*);
 void openGlInit              ();
 
 // =============================================================================
-//  Carga de texturas
+//  Carga de textura
 // =============================================================================
-//
-//  Parámetros GL para tileado sin costura:
-//    · GL_REPEAT          → la textura se repite infinitamente
-//    · GL_LINEAR_MIPMAP_LINEAR → trilineal, elimina el efecto de "sierra"
-//      en las transiciones entre niveles de mipmap (aliasing a distancia)
-//
-//  Para que no se note el corte, hay que:
-//    1. Usar una textura que sea tileable (bordes que encajan).
-//    2. Escalar las UVs en buildQuad de forma proporcional al tamaño real
-//       del quad (p. ej. 1 UV-unit = 1 metro de mundo), de modo que la
-//       escala es coherente en toda la escena.
-//
 unsigned int loadTexture(const char* path)
 {
     unsigned int texID;
     glGenTextures(1, &texID);
 
-    int w, h, nChannels;
-    // stb_image carga con origen en la esquina superior-izquierda;
-    // OpenGL espera origen en la inferior-izquierda → volteamos.
+    int w, h, nCh;
     stbi_set_flip_vertically_on_load(true);
-    unsigned char* data = stbi_load(path, &w, &h, &nChannels, 0);
-
+    unsigned char* data = stbi_load(path, &w, &h, &nCh, 0);
     if (data) {
-        GLenum fmt = (nChannels == 4) ? GL_RGBA : GL_RGB;
-
+        GLenum fmt = (nCh == 4) ? GL_RGBA : GL_RGB;
         glBindTexture(GL_TEXTURE_2D, texID);
         glTexImage2D(GL_TEXTURE_2D, 0, fmt, w, h, 0, fmt, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
-
-        // Modo de repetición en ambos ejes
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-        // Filtrado: trilineal (suaviza la transición entre mipmaps)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        // Anisotropía (extensión GL_EXT_texture_filter_anisotropic).
-        // Usamos los valores numéricos directamente para no depender de que
-        // el header los defina — son parte del estándar EXT, siempre 0x84FE/0x84FF.
         #ifndef GL_TEXTURE_MAX_ANISOTROPY
         #define GL_TEXTURE_MAX_ANISOTROPY     0x84FE
         #define GL_MAX_TEXTURE_MAX_ANISOTROPY 0x84FF
         #endif
         if (glfwExtensionSupported("GL_EXT_texture_filter_anisotropic")) {
-            float maxAniso = 1.0f;
+            float maxAniso = 1.f;
             glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maxAniso);
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, maxAniso);
         }
-
         stbi_image_free(data);
-        std::cout << "[TEX] Cargada: " << path
-                  << "  (" << w << "x" << h << ", ch=" << nChannels << ")\n";
+        std::cout << "[TEX] " << path << " (" << w << "x" << h << ")\n";
     } else {
-        // Si la textura no existe, devolvemos 0 y el shader usará el color sólido.
-        std::cerr << "[TEX] AVISO: no se pudo cargar '" << path
-                  << "'. Se usará color sólido.\n";
+        std::cerr << "[TEX] No encontrada: " << path << " – usando color sólido\n";
         glDeleteTextures(1, &texID);
         texID = 0;
         stbi_image_free(data);
     }
-
     glBindTexture(GL_TEXTURE_2D, 0);
     return texID;
 }
 
-// Helper: bindea una textura en la unidad 0 y activa o desactiva el sampler.
-// Si texID == 0 (no cargada), desactiva el sampler → color sólido de fallback.
 inline void bindTex(int locUseTex, unsigned int texID)
 {
-    if (texID != 0) {
+    if (texID) {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texID);
         glUniform1i(locUseTex, 1);
@@ -145,77 +102,94 @@ inline void bindTex(int locUseTex, unsigned int texID)
 }
 
 // =============================================================================
-//  Colores neutros del corredor
+//  Colores neutros de corredor
 // =============================================================================
 static const glm::vec3 CWC = { 0.78f, 0.76f, 0.72f };
 static const glm::vec3 CFC = { 0.48f, 0.46f, 0.43f };
 static const glm::vec3 CCC = { 0.86f, 0.86f, 0.88f };
 
 // =============================================================================
-//  Dibuja una variante completa con texturas
-//
-//  Estrategia de bind:
-//    · drawRoom  llama a drawMesh internamente, que no sabe de texturas.
-//      Por eso las dibujamos por partes: primero suelos de todas las rooms,
-//      luego techos, luego paredes → cambiamos la textura una sola vez
-//      por "tipo de superficie", no una vez por mesh.
-//  
-//  Esto minimiza los cambios de estado de OpenGL.
+//  drawVariant – dibuja toda la geometría de una variante
 // =============================================================================
 static void drawVariant(unsigned int prog, int locModel, int locColor, int locUseTex,
                         unsigned int texWall, unsigned int texFloor, unsigned int texCeil,
                         const RoomVariant& V, bool isActive)
 {
-    // Colores de anomalía para la habitación central; neutros para corredores.
     glm::vec3 roomWC = isActive ? G.roomWall  : glm::vec3{0.82f,0.80f,0.75f};
     glm::vec3 roomFC = isActive ? G.roomFloor : glm::vec3{0.55f,0.52f,0.48f};
     glm::vec3 roomCC = isActive ? G.roomCeil  : glm::vec3{0.90f,0.90f,0.92f};
 
     // ── SUELOS ────────────────────────────────────────────────────────────────
-    // Color de fallback en caso de no tener textura
-    glUniform3fv(locColor, 1, glm::value_ptr(roomFC));
     bindTex(locUseTex, texFloor);
-
     drawMesh(prog, locModel, locColor, V.room.floor,      roomFC);
-    drawMesh(prog, locModel, locColor, V.corA.floor,      CFC);
-    drawMesh(prog, locModel, locColor, V.corB.floor,      CFC);
-    drawMesh(prog, locModel, locColor, V.corATurn.floor,  CFC);
-    drawMesh(prog, locModel, locColor, V.corBTurn.floor,  CFC);
+    // Tramos rectos A
+    drawMesh(prog, locModel, locColor, V.corA1.floor,     CFC);
+    drawMesh(prog, locModel, locColor, V.corA2.floor,     CFC);
+    drawMesh(prog, locModel, locColor, V.corA3.floor,     CFC);
+    // Codos A
+    drawMesh(prog, locModel, locColor, V.elbowA1floor,    CFC);
+    drawMesh(prog, locModel, locColor, V.elbowA2floor,    CFC);
+    // Tramos rectos B
+    drawMesh(prog, locModel, locColor, V.corB1.floor,     CFC);
+    drawMesh(prog, locModel, locColor, V.corB2.floor,     CFC);
+    drawMesh(prog, locModel, locColor, V.corB3.floor,     CFC);
+    // Codos B
+    drawMesh(prog, locModel, locColor, V.elbowB1floor,    CFC);
+    drawMesh(prog, locModel, locColor, V.elbowB2floor,    CFC);
 
     // ── TECHOS ────────────────────────────────────────────────────────────────
-    glUniform3fv(locColor, 1, glm::value_ptr(roomCC));
     bindTex(locUseTex, texCeil);
-
-    drawMesh(prog, locModel, locColor, V.room.ceiling,      roomCC);
-    drawMesh(prog, locModel, locColor, V.corA.ceiling,      CCC);
-    drawMesh(prog, locModel, locColor, V.corB.ceiling,      CCC);
-    drawMesh(prog, locModel, locColor, V.corATurn.ceiling,  CCC);
-    drawMesh(prog, locModel, locColor, V.corBTurn.ceiling,  CCC);
+    drawMesh(prog, locModel, locColor, V.room.ceiling,    roomCC);
+    drawMesh(prog, locModel, locColor, V.corA1.ceiling,   CCC);
+    drawMesh(prog, locModel, locColor, V.corA2.ceiling,   CCC);
+    drawMesh(prog, locModel, locColor, V.corA3.ceiling,   CCC);
+    drawMesh(prog, locModel, locColor, V.elbowA1ceil,     CCC);
+    drawMesh(prog, locModel, locColor, V.elbowA2ceil,     CCC);
+    drawMesh(prog, locModel, locColor, V.corB1.ceiling,   CCC);
+    drawMesh(prog, locModel, locColor, V.corB2.ceiling,   CCC);
+    drawMesh(prog, locModel, locColor, V.corB3.ceiling,   CCC);
+    drawMesh(prog, locModel, locColor, V.elbowB1ceil,     CCC);
+    drawMesh(prog, locModel, locColor, V.elbowB2ceil,     CCC);
 
     // ── PAREDES ───────────────────────────────────────────────────────────────
-    glUniform3fv(locColor, 1, glm::value_ptr(roomWC));
     bindTex(locUseTex, texWall);
-
-    // Habitación
-    drawMesh(prog, locModel, locColor, V.room.wN, roomWC);
-    drawMesh(prog, locModel, locColor, V.room.wS, roomWC);
-    drawMesh(prog, locModel, locColor, V.room.wE, roomWC);
-    drawMesh(prog, locModel, locColor, V.room.wW, roomWC);
-    // Pasillos rectos
-    drawMesh(prog, locModel, locColor, V.corA.wLeft,    CWC);
-    drawMesh(prog, locModel, locColor, V.corA.wRight,   CWC);
-    drawMesh(prog, locModel, locColor, V.corB.wLeft,    CWC);
-    drawMesh(prog, locModel, locColor, V.corB.wRight,   CWC);
-    // Codos
-    drawMesh(prog, locModel, locColor, V.corATurn.wLeft,   CWC);
-    drawMesh(prog, locModel, locColor, V.corATurn.wRight,  CWC);
-    drawMesh(prog, locModel, locColor, V.corBTurn.wLeft,   CWC);
-    drawMesh(prog, locModel, locColor, V.corBTurn.wRight,  CWC);
-    // Paredes de cierre y esquinas
-    drawMesh(prog, locModel, locColor, V.endWallA,    CWC);
-    drawMesh(prog, locModel, locColor, V.endWallB,    CWC);
-    drawMesh(prog, locModel, locColor, V.cornerWallA, CWC);
-    drawMesh(prog, locModel, locColor, V.cornerWallB, CWC);
+    // Sala
+    drawMesh(prog, locModel, locColor, V.room.wN,         roomWC);
+    drawMesh(prog, locModel, locColor, V.room.wS,         roomWC);
+    drawMesh(prog, locModel, locColor, V.room.wE,         roomWC);
+    drawMesh(prog, locModel, locColor, V.room.wW,         roomWC);
+    // Corredor A1
+    drawMesh(prog, locModel, locColor, V.corA1.wLeft,     CWC);
+    drawMesh(prog, locModel, locColor, V.corA1.wRight,    CWC);
+    // Codo A1
+    drawMesh(prog, locModel, locColor, V.elbowA1wallOuter, CWC);
+    drawMesh(prog, locModel, locColor, V.elbowA1wallInner, CWC);
+    // Corredor A2
+    drawMesh(prog, locModel, locColor, V.corA2.wLeft,     CWC);
+    drawMesh(prog, locModel, locColor, V.corA2.wRight,    CWC);
+    // Codo A2
+    drawMesh(prog, locModel, locColor, V.elbowA2wallOuter, CWC);
+    drawMesh(prog, locModel, locColor, V.elbowA2wallInner, CWC);
+    // Corredor A3
+    drawMesh(prog, locModel, locColor, V.corA3.wLeft,     CWC);
+    drawMesh(prog, locModel, locColor, V.corA3.wRight,    CWC);
+    drawMesh(prog, locModel, locColor, V.endWallA,        CWC);
+    // Corredor B1
+    drawMesh(prog, locModel, locColor, V.corB1.wLeft,     CWC);
+    drawMesh(prog, locModel, locColor, V.corB1.wRight,    CWC);
+    // Codo B1
+    drawMesh(prog, locModel, locColor, V.elbowB1wallOuter, CWC);
+    drawMesh(prog, locModel, locColor, V.elbowB1wallInner, CWC);
+    // Corredor B2
+    drawMesh(prog, locModel, locColor, V.corB2.wLeft,     CWC);
+    drawMesh(prog, locModel, locColor, V.corB2.wRight,    CWC);
+    // Codo B2
+    drawMesh(prog, locModel, locColor, V.elbowB2wallOuter, CWC);
+    drawMesh(prog, locModel, locColor, V.elbowB2wallInner, CWC);
+    // Corredor B3
+    drawMesh(prog, locModel, locColor, V.corB3.wLeft,     CWC);
+    drawMesh(prog, locModel, locColor, V.corB3.wRight,    CWC);
+    drawMesh(prog, locModel, locColor, V.endWallB,        CWC);
 }
 
 // =============================================================================
@@ -225,7 +199,6 @@ int main()
 {
     srand(static_cast<unsigned>(time(nullptr)));
 
-    // ── Inicialización GLFW ───────────────────────────────────────────────────
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -233,7 +206,6 @@ int main()
 
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "The Exit 8", nullptr, nullptr);
     if (!window) { glfwTerminate(); return -1; }
-
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
     glfwSetCursorPosCallback      (window, mouseCallback);
@@ -254,137 +226,144 @@ int main()
     int locColor  = glGetUniformLocation(shader, "uColor");
     int locTex    = glGetUniformLocation(shader, "uTexBase");
 
-    // El sampler siempre leerá de la unidad de textura 0
+    // ── Shader de Efecto de Fallo (Glitch) ────────────────────────────────────
+    unsigned int staticShader = setShaders("static.vert", "static.frag");
+    int locStatTime  = glGetUniformLocation(staticShader, "uTime");
+    int locStatAlpha = glGetUniformLocation(staticShader, "uAlpha");
+
+    // Necesitamos un VAO vacío para usar el truco del triángulo de pantalla completa
+    unsigned int emptyVAO;
+    glGenVertexArrays(1, &emptyVAO);
+
+    float failTimer = 0.0f; // Temporizador para el desvanecimiento del efecto
+
+    // Carga del Shader de Victoria
+    unsigned int winShader = setShaders("static.vert", "win.frag"); // Reusa el .vert
+    int locWinTime  = glGetUniformLocation(winShader, "uTime");
+    int locWinAlpha = glGetUniformLocation(winShader, "uAlpha");
+
+    float winTimer = 0.0f; // Nuevo temporizador
+
     glUseProgram(shader);
     glUniform1i(locTex, 0);
 
     // ── Texturas ──────────────────────────────────────────────────────────────
-    //
-    //  Convención de escala UV usada en buildQuad (ver Room.cpp):
-    //    suelo/techo  → su = w/2,  sv = d/2   (1 tile ≈ 2 metros de mundo)
-    //    paredes      → su = d/2,  sv = h/2
-    //  Con GL_REPEAT la textura se repite automáticamente; no hay costuras si
-    //  la imagen es tileable (sus bordes opuestos encajan).
-    //
-    unsigned int texWall  = loadTexture("tex_wall.jpg");
-    unsigned int texFloor = loadTexture("tex_floor.jpg");
-    unsigned int texCeil  = loadTexture("tex_ceil.jpg");
+    unsigned int texWall  = loadTexture("tex_baldosa.jpg");
+    unsigned int texFloor = loadTexture("tex_baldosa.jpg");
+    unsigned int texCeil  = loadTexture("tex_baldosa.jpg");
 
     // ── Variantes ─────────────────────────────────────────────────────────────
+    // Variante 0: siempre empieza sin anomalía para el tutorial implícito
+    // Variante 1: anomalía aleatoria
     std::array<RoomVariant, NUM_VARIANTS> variants;
     variants[0] = buildVariant(0, AnomalyType::NONE);
-
-    //variants[1] = buildVariant(1, AnomalyType::NONE);
-    variants[1] = buildVariant(1, AnomalyType::RED_LIGHTS);
+    variants[1] = buildVariant(1, randomAnomaly());
 
     // ── Estado inicial ────────────────────────────────────────────────────────
-    G.currentVariant = rand() % NUM_VARIANTS;
+    G.currentVariant = 0;
     applyAnomalyColors(variants[G.currentVariant].anomaly);
     activateLights(variants[G.currentVariant]);
     G.entryDir = EntryDir::FROM_A;
 
-    // Calculamos el trigger a la MITAD EXACTA DEL PASILLO
-    float init_cor_len = CL - CW;
-    float init_triggerDist = (RD / 2.0f) + (init_cor_len / 2.0f);
-
-    // Spawn inicial modificado
-    glm::vec3 fakePos = variants[G.currentVariant].origin + glm::vec3(-RW / 2.f + CW / 2.f, EYE, init_triggerDist);
-    spawnAtCorridor(variants[G.currentVariant], variants[G.currentVariant], true, fakePos, init_triggerDist);
-
+    // Spawn: al inicio del tramo A3 (el jugador acaba de cruzar el trigger
+    // ficticio y está a punto de entrar en la sala por primera vez).
+    spawnAtCorridor(variants[G.currentVariant], true);
 
     std::cout << "=========================================\n"
               << "  THE EXIT 8\n"
-              << "  WASD + raton para moverte\n"
-              << "  Anomalia: VUELVE por donde viniste.\n"
+              << "  WASD + ratón para moverte\n"
+              << "  Anomalía: VUELVE por donde viniste.\n"
               << "  Normal:   SIGUE adelante.\n"
               << "=========================================\n"
-              << "[NIVEL 1] Anomalia: "
-              << (G.currentAnomaly == AnomalyType::NONE ? "ninguna" : "LUCES ROJAS") << "\n";
+              << "[NIVEL 1] Anomalía: "
+              << (G.currentAnomaly == AnomalyType::NONE ? "ninguna" : "LUCES ROJAS")
+              << "\n";
 
-    // ── Bucle principal
+    // ── Bucle principal ────────────────────────────────────────────────────────
     while (!glfwWindowShouldClose(window))
     {
-        float now = static_cast<float>(glfwGetTime());
-        deltaTime = now - lastFrame;
-        lastFrame = now;
+        float now  = static_cast<float>(glfwGetTime());
+        deltaTime  = now - lastFrame;
+        lastFrame  = now;
 
         processInput(window);
         applyCollisions(camera.Position, variants[G.currentVariant]);
 
-        // ── Triggers de teleport ──────────────────────────────────────────────
-        // El teleport es INSTANTÁNEO: no hay fade.
-        // Se hace directamente en el mismo frame en que se cruza el umbral.
+        // ── Triggers ──────────────────────────────────────────────────────────
+        // El trigger se activa en la mitad del tramo 3 del pasillo activo.
+        // Geometría:
+        //   Tramo A3 center Z = corA3Center.z
+        //   El trigger está a corA3Center.z + CL3/2 (el extremo más cercano a A1)
+        //     pero la cámara viene desde ese extremo, así que el trigger es
+        //     cuando Z < corA3Center.z – CL3/2 + margen (o sea, pasada la mitad)
+        //
+        // Simplificado: usamos triggerDist guardado en V para determinar
+        // si el jugador ha cruzado el punto medio del tramo 3.
+
         if (G.state == GameState::PLAYING)
         {
-            const RoomVariant& V = variants[G.currentVariant];
-            float camZ = camera.Position.z;
+            const RoomVariant& currentV = variants[G.currentVariant];
+            float trigX_A = currentV.corA2Center.x - (CL2 / 2.f) + 1.5f;
+            float trigX_B = currentV.corB2Center.x + (CL2 / 2.f) - 1.5f;
+            float camX = camera.Position.x;
 
-            // Calcula el umbral de trigger igual que spawnAtCorridor
-            float cor_len     = CL - CW;
-            float zDistNear   = (RD / 2.0f) + cor_len;
-            float triggerDist = zDistNear - 3.5f;   // 3.5 u antes del codo
+            bool isAdvance = (G.entryDir == EntryDir::FROM_A && camX > trigX_B) || 
+                             (G.entryDir == EntryDir::FROM_B && camX < trigX_A);
+            
+            bool isRetreat = (G.entryDir == EntryDir::FROM_A && camX < trigX_A) || 
+                             (G.entryDir == EntryDir::FROM_B && camX > trigX_B);
 
-            // ─ Trigger Norte (Z+) ─────────────────────────────────────────────
-            if (camZ > V.origin.z + triggerDist)
+            if (isAdvance || isRetreat)
             {
-                bool isRetreating = (G.entryDir == EntryDir::FROM_B);
-                bool anomaly      = (G.currentAnomaly != AnomalyType::NONE);
-                bool correct      = isRetreating ? anomaly : !anomaly;
+                bool hasAnomaly = (currentV.anomaly != AnomalyType::NONE);
+                bool correct = (isAdvance && !hasAnomaly) || (isRetreat && hasAnomaly);
 
-                if (correct) G.score++; else G.score = 0;
-                if (G.score > G.highScore) G.highScore = G.score;
+                if (correct) {
+                    G.score++;
+                    if (G.score > G.highScore) G.highScore = G.score;
+                    
+                    if (G.score > 8) {
+                        std::cout << "¡VICTORIA! Has escapado del bucle.\n";
+                        winTimer = 2.5f; // Efecto verde largo
+                        G.score = 0;     // Reinicio tras ganar
+                    } else {
+                        std::cout << "[OK] Avanzas al Nivel " << G.score << "\n";
+                    }
+                } else {
+                    G.score = 0;
+                    std::cout << "[FAIL] Error en la simulación. Reiniciando...\n";
+                    failTimer = 1.5f; // Efecto rojo
+                }
 
-                std::cout << (correct ? "[OK]   " : "[FAIL] ")
-                          << (isRetreating ? "Retrocede" : "Avanza")
-                          << " por Norte. Anomalia:" << (anomaly ? "SI" : "NO")
-                          << "  Racha:" << G.score
-                          << "  Record:" << G.highScore << "\n";
+                // SIEMPRE generamos una sala nueva. 
+                // El nivel 0 (score 0) nunca tiene anomalías.
+                AnomalyType nextAnomaly = (G.score == 0) ? AnomalyType::NONE : randomAnomaly();
 
-                // Cambiar a la siguiente variante y spawnear en el lado opuesto
-                int nextVar = nextVariantIdx(G.currentVariant);
-                G.currentVariant = nextVar;
+                int nextVarIdx = nextVariantIdx(G.currentVariant);
+                variants[nextVarIdx] = buildVariant(nextVarIdx, nextAnomaly);
+
+                // TP relativo (Mantenemos tu lógica de inercias anterior)
+                bool toA = (camX > trigX_B);
+                const RoomVariant& nextV = variants[nextVarIdx];
+                if (toA) {
+                    float overX = camX - trigX_B;
+                    camera.Position.x = nextV.corA2Center.x + (CL2 / 2.f) - 1.5f + overX;
+                    camera.Position.z = nextV.corA2Center.z + (camera.Position.z - currentV.corB2Center.z);
+                } else {
+                    float overX = camX - trigX_A;
+                    camera.Position.x = nextV.corB2Center.x - (CL2 / 2.f) + 1.5f + overX;
+                    camera.Position.z = nextV.corB2Center.z + (camera.Position.z - currentV.corA2Center.z);
+                }
+
+                G.currentVariant = nextVarIdx;
+                G.entryDir = toA ? EntryDir::FROM_A : EntryDir::FROM_B;
                 applyAnomalyColors(variants[G.currentVariant].anomaly);
                 activateLights(variants[G.currentVariant]);
-                // Salir por Norte → entrar por Sur (corA) en la nueva variante
-                spawnAtCorridor(variants[G.currentVariant], true);
-                G.entryDir = EntryDir::FROM_A;
-
-                std::cout << "[NIVEL " << G.score + 1 << "] Anomalia: "
-                          << (G.currentAnomaly == AnomalyType::NONE ? "ninguna" : "LUCES ROJAS")
-                          << "\n";
-            }
-            // ─ Trigger Sur (Z-) ───────────────────────────────────────────────
-            else if (camZ < V.origin.z - triggerDist)
-            {
-                bool isRetreating = (G.entryDir == EntryDir::FROM_A);
-                bool anomaly      = (G.currentAnomaly != AnomalyType::NONE);
-                bool correct      = isRetreating ? anomaly : !anomaly;
-
-                if (correct) G.score++; else G.score = 0;
-                if (G.score > G.highScore) G.highScore = G.score;
-
-                std::cout << (correct ? "[OK]   " : "[FAIL] ")
-                          << (isRetreating ? "Retrocede" : "Avanza")
-                          << " por Sur. Anomalia:" << (anomaly ? "SI" : "NO")
-                          << "  Racha:" << G.score
-                          << "  Record:" << G.highScore << "\n";
-
-                int nextVar = nextVariantIdx(G.currentVariant);
-                G.currentVariant = nextVar;
-                applyAnomalyColors(variants[G.currentVariant].anomaly);
-                activateLights(variants[G.currentVariant]);
-                // Salir por Sur → entrar por Norte (corB) en la nueva variante
-                spawnAtCorridor(variants[G.currentVariant], false);
-                G.entryDir = EntryDir::FROM_B;
-
-                std::cout << "[NIVEL " << G.score + 1 << "] Anomalia: "
-                          << (G.currentAnomaly == AnomalyType::NONE ? "ninguna" : "LUCES ROJAS")
-                          << "\n";
             }
         }
 
         // ── Render ────────────────────────────────────────────────────────────
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClearColor(0.f, 0.f, 0.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader);
@@ -402,18 +381,50 @@ int main()
                         texWall, texFloor, texCeil,
                         variants[i], i == G.currentVariant);
 
+        // ── Render Efecto Estática (Post-Procesado) ───────────────────────────
+        if (failTimer > 0.0f)
+        {
+            failTimer -= deltaTime;
+            if (failTimer < 0.0f) failTimer = 0.0f;
+
+            glUseProgram(staticShader);
+            glUniform1f(locStatTime, (float)glfwGetTime());
+            // Calculamos el alpha para que se desvanezca (1.0 -> 0.0)
+            glUniform1f(locStatAlpha, failTimer / 1.5f);
+
+            // Desactivamos el test de profundidad para que se dibuje por encima de todo
+            glDisable(GL_DEPTH_TEST);
+            
+            glBindVertexArray(emptyVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 3); // Dibuja la pantalla completa
+            
+            // Lo volvemos a activar para el siguiente frame
+            glEnable(GL_DEPTH_TEST);
+        }
+
+        // ── Render Efecto Victoria (Verde) ────────────────────────────────────
+        if (winTimer > 0.0f)
+        {
+            winTimer -= deltaTime;
+            glUseProgram(winShader);
+            glUniform1f(locWinTime, (float)glfwGetTime());
+            glUniform1f(locWinAlpha, winTimer / 2.5f);
+            glDisable(GL_DEPTH_TEST);
+            glBindVertexArray(emptyVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glEnable(GL_DEPTH_TEST);
+        }
+
         glBindVertexArray(0);
-        glBindTexture(GL_TEXTURE_2D, 0);   // limpieza, buena práctica
+        glBindTexture(GL_TEXTURE_2D, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    // ── Limpieza ──────────────────────────────────────────────────────────────
     if (texWall)  glDeleteTextures(1, &texWall);
     if (texFloor) glDeleteTextures(1, &texFloor);
     if (texCeil)  glDeleteTextures(1, &texCeil);
-
     glfwTerminate();
     return 0;
 }
@@ -422,23 +433,18 @@ int main()
 //  Callbacks
 // =============================================================================
 void framebufferSizeCallback(GLFWwindow*, int w, int h)
-{
-    glViewport(0, 0, w, h);
-}
+{ glViewport(0, 0, w, h); }
 
 void mouseCallback(GLFWwindow*, double xI, double yI)
 {
-    float x = static_cast<float>(xI);
-    float y = static_cast<float>(yI);
+    float x = (float)xI, y = (float)yI;
     if (firstMouse) { lastX = x; lastY = y; firstMouse = false; }
     camera.ProcessMouseMovement(x - lastX, lastY - y);
     lastX = x; lastY = y;
 }
 
 void scrollCallback(GLFWwindow*, double, double yO)
-{
-    camera.Fov = glm::clamp(camera.Fov - (float)yO, 20.f, 90.f);
-}
+{ camera.Fov = glm::clamp(camera.Fov - (float)yO, 20.f, 90.f); }
 
 void processInput(GLFWwindow* w)
 {
@@ -454,5 +460,5 @@ void openGlInit()
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
 }

@@ -4,28 +4,13 @@
 
 // =============================================================================
 //  buildRoom
+//
+//  La sala tiene dos aperturas:
+//    · Sur (–Z): corredor A en la esquina oeste  X ∈ [–HW, –HW+CW]
+//    · Norte (+Z): corredor B en la esquina este X ∈ [+HW–CW, +HW]
+//
+//  Las paredes N y S se dividen en un tramo sólido (el hueco ya está abierto).
 // =============================================================================
-/*Room buildRoom(glm::vec3 center, float w, float d, float h)
-{
-    Room R;
-    float hw = w / 2.f, hd = d / 2.f;
-    glm::vec3 c = center;
-
-    R.floor   = buildQuad(c + glm::vec3(-hw, 0,  hd), {1,0,0}, w, {0,0,-1}, d, {0,1,0}, w/2.f, d/2.f);
-    R.ceiling = buildQuad(c + glm::vec3(-hw, h, -hd), {1,0,0}, w, {0,0, 1}, d, {0,-1,0}, w/2.f, d/2.f);
-
-    // Pared Norte (+Z): Sólido en X=[-4, 1], Hueco en X=[1, 4]
-    R.wN = buildQuad(c + glm::vec3(-4.f, 0, hd), { 1,0,0 }, 5.f, { 0,1,0 }, h, { 0,0,-1 }, 2.5f, h / 2.f);
-
-    // Pared Sur (-Z): Sólido en X=[-1, 4], Hueco en X=[-4, -1]
-    R.wS = buildQuad(c + glm::vec3(-1.f, 0, -hd), { 1,0,0 }, 5.f, { 0,1,0 }, h, { 0,0,1 }, 2.5f, h / 2.f);
-
-    R.wE = buildQuad(c + glm::vec3( hw, 0, -hd), {0,0,1}, d,  {0,1,0}, h, {-1,0,0}, d/2.f, h/2.f);
-    R.wW = buildQuad(c + glm::vec3(-hw, 0,  hd), {0,0,-1}, d, {0,1,0}, h, { 1,0,0}, d/2.f, h/2.f);
-
-    return R;
-}*/
-
 Room buildRoom(glm::vec3 center, float w, float d, float h)
 {
     Room R;
@@ -33,40 +18,59 @@ Room buildRoom(glm::vec3 center, float w, float d, float h)
     float hd = d / 2.f;
     glm::vec3 c = center;
 
-    R.floor = buildQuad(c + glm::vec3(-hw, 0, hd), { 1,0,0 }, w, { 0,0,-1 }, d, { 0,1,0 }, w / 2.f, d / 2.f);
-    R.ceiling = buildQuad(c + glm::vec3(-hw, h, -hd), { 1,0,0 }, w, { 0,0, 1 }, d, { 0,-1,0 }, w / 2.f, d / 2.f);
+    // ── Suelo y techo completos ───────────────────────────────────────────────
+    R.floor   = buildQuad(c + glm::vec3(-hw, 0, hd),
+                          {1,0,0}, w, {0,0,-1}, d, {0,1,0},
+                          w/2.f, d/2.f);
+    R.ceiling = buildQuad(c + glm::vec3(-hw, h, -hd),
+                          {1,0,0}, w, {0,0, 1}, d, {0,-1,0},
+                          w/2.f, d/2.f);
 
-    // Asumimos que CW (ancho del pasillo) es accesible aquí. Si no lo es, pásalo como parámetro.
-    float wallWidth = w - CW; // La parte sólida de la pared
+    // ── Paredes Este y Oeste completas ────────────────────────────────────────
+    R.wE = buildQuad(c + glm::vec3( hw, 0, -hd),
+                     {0,0,1}, d, {0,1,0}, h, {-1,0,0},
+                     d/2.f, h/2.f);
+    R.wW = buildQuad(c + glm::vec3(-hw, 0, hd),
+                     {0,0,-1}, d, {0,1,0}, h, {1,0,0},
+                     d/2.f, h/2.f);
 
-    // Pared Norte (+Z): Hueco en la derecha (X = hw)
-    float xNorthCenter = -hw + (wallWidth / 2.f);
-    R.wN = buildQuad(c + glm::vec3(-hw, 0, hd), { 1,0,0 }, wallWidth, { 0,1,0 }, h, { 0,0,-1 }, wallWidth / 2.f, h / 2.f);
+    // ── Pared Sur (–Z): hueco en el lado oeste [–hw, –hw+CW], sólido el resto ─
+    // Sólido: X ∈ [–hw+CW, hw]  longitud = w – CW
+    float solidW = w - CW;
+    R.wS = buildQuad(c + glm::vec3(-hw + CW, 0, -hd),
+                     {1,0,0}, solidW, {0,1,0}, h, {0,0,1},
+                     solidW/2.f, h/2.f);
 
-    // Pared Sur (-Z): Hueco en la izquierda (X = -hw)
-    float xSouthCenter = hw - (wallWidth / 2.f);
-    R.wS = buildQuad(c + glm::vec3(-hw + CW, 0, -hd), { 1,0,0 }, wallWidth, { 0,1,0 }, h, { 0,0,1 }, wallWidth / 2.f, h / 2.f);
-
-    R.wE = buildQuad(c + glm::vec3(hw, 0, -hd), { 0,0,1 }, d, { 0,1,0 }, h, { -1,0,0 }, d / 2.f, h / 2.f);
-    R.wW = buildQuad(c + glm::vec3(-hw, 0, hd), { 0,0,-1 }, d, { 0,1,0 }, h, { 1,0,0 }, d / 2.f, h / 2.f);
+    // ── Pared Norte (+Z): hueco en el lado este [hw–CW, hw], sólido el resto ─
+    R.wN = buildQuad(c + glm::vec3(-hw, 0, hd),
+                     {1,0,0}, solidW, {0,1,0}, h, {0,0,-1},
+                     solidW/2.f, h/2.f);
 
     return R;
 }
 
 // =============================================================================
-//  buildCorridorZ
+//  buildCorridorZ  – tubo rectangular a lo largo del eje Z
 // =============================================================================
 Corridor buildCorridorZ(glm::vec3 center, float len, float w, float h)
 {
     Corridor C;
-    float hl = len / 2.f, hw = w / 2.f;
+    float hl = len / 2.f;
+    float hw = w   / 2.f;
     glm::vec3 c = center;
 
-    C.floor   = buildQuad(c + glm::vec3(-hw, 0,  hl), {1,0,0}, w, {0,0,-1}, len, {0,1,0},  w/2.f, len/2.f);
-    C.ceiling = buildQuad(c + glm::vec3(-hw, h, -hl), {1,0,0}, w, {0,0, 1}, len, {0,-1,0}, w/2.f, len/2.f);
-    C.wLeft   = buildQuad(c + glm::vec3(-hw, 0,  hl), {0,0,-1}, len, {0,1,0}, h, { 1,0,0}, len/2.f, h/2.f);
-    C.wRight  = buildQuad(c + glm::vec3( hw, 0, -hl), {0,0, 1}, len, {0,1,0}, h, {-1,0,0}, len/2.f, h/2.f);
-
+    C.floor   = buildQuad(c + glm::vec3(-hw, 0, -hl),
+                          {1,0,0}, w, {0,0,1}, len, {0,1,0},
+                          w/2.f, len/2.f);
+    C.ceiling = buildQuad(c + glm::vec3(-hw, h, hl),
+                          {1,0,0}, w, {0,0,-1}, len, {0,-1,0},
+                          w/2.f, len/2.f);
+    C.wLeft   = buildQuad(c + glm::vec3(-hw, 0, -hl),
+                          {0,0,1}, len, {0,1,0}, h, {1,0,0},
+                          len/2.f, h/2.f);
+    C.wRight  = buildQuad(c + glm::vec3( hw, 0, hl),
+                          {0,0,-1}, len, {0,1,0}, h, {-1,0,0},
+                          len/2.f, h/2.f);
     return C;
 }
 
