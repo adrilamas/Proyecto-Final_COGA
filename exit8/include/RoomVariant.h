@@ -63,6 +63,11 @@ struct RoomVariant {
     // El trigger se activa a mitad del Tramo 3.
     // Se calcula en buildVariant y se guarda aquí para usarlo en main y spawn.
     float       triggerDist;  // positivo; lado A usa –triggerDist, lado B +triggerDist
+    
+    // ── Geometría de lámparas ──
+    std::vector<Mesh> lightCasings; 
+    std::vector<Mesh> roomLEDs;       // LEDs de la sala principal
+    std::vector<Mesh> corridorLEDs;   // LEDs de los pasillos
 };
 
 // ── Factory ───────────────────────────────────────────────────────────────────

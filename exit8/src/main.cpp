@@ -190,6 +190,30 @@ static void drawVariant(unsigned int prog, int locModel, int locColor, int locUs
     drawMesh(prog, locModel, locColor, V.corB3.wLeft,     CWC);
     drawMesh(prog, locModel, locColor, V.corB3.wRight,    CWC);
     drawMesh(prog, locModel, locColor, V.endWallB,        CWC);
+
+    // ── LÁMPARAS LED ──────────────────────────────────────────────────────────
+    bindTex(locUseTex, 0);
+    
+    // Carcasas de todas las lámparas
+    for (const auto& mesh : V.lightCasings) {
+        drawMesh(prog, locModel, locColor, mesh, glm::vec3(0.15f, 0.15f, 0.15f));
+    }
+    
+    // 1. LEDs de los pasillos (Siempre blancos)
+    glm::vec3 corridorLedColor = {1.5f, 1.5f, 1.5f};
+    for (const auto& mesh : V.corridorLEDs) {
+        drawMesh(prog, locModel, locColor, mesh, corridorLedColor);
+    }
+
+    // 2. LEDs de la sala principal (Cambian con la anomalía)
+    glm::vec3 roomLedColor = {1.5f, 1.5f, 1.5f}; 
+    if (isActive && G.currentAnomaly == AnomalyType::RED_LIGHTS) {
+        roomLedColor = {2.0f, 0.05f, 0.05f}; 
+    }
+    
+    for (const auto& mesh : V.roomLEDs) {
+        drawMesh(prog, locModel, locColor, mesh, roomLedColor);
+    }
 }
 
 // =============================================================================

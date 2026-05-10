@@ -16,7 +16,7 @@ static constexpr float CL1             = 10.0f;
 //   Tramo 2: pasillo tras el primer giro (perpendicular)
 static constexpr float CL2             = 8.0f;
 //   Tramo 3: pasillo tras el segundo giro (parallel de vuelta)
-static constexpr float CL3             = 14.0f;   // el trigger está a mitad de este
+static constexpr float CL3             = 10.0f;   // el trigger está a mitad de este
 
 static constexpr float EYE             = 1.8f;    // altura de los ojos del jugador
 

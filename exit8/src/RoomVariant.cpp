@@ -249,16 +249,42 @@ RoomVariant buildVariant(int variantIdx, AnomalyType anomaly)
     // triggerDist ya calculado por A; verificamos coincidencia aproximada
     // (son geométricamente simétricos así que deben ser iguales)
 
-    // ── Paredes de cierre entre sala y pasillos ───────────────────────────────
-    // La sala tiene abertura de ancho CW en la pared Norte (+Z, lado B)
-    // y en la pared Sur (–Z, lado A).
-    // Las paredes de la sala ya tienen hueco (ver buildRoom), pero hay que
-    // tapar el tramo sólido que queda entre el hueco del pasillo y el borde.
+    // ── Lámparas LED (Tubos lineales) ─────────────────────────────────────────
+    auto addFixture = [&](glm::vec3 p, bool alongZ, bool isRoom) {
+        float sizeX = alongZ ? 2.4f : 0.3f;
+        float sizeZ = alongZ ? 0.3f : 2.4f;
+        float H     = 0.15f; 
 
-    // Gap pared Norte (la sala tiene el hueco del corredor B a la derecha)
-    // El corredor B sale desde X∈[bxL,bxR] = [HW-CW, HW]
-    // La pared norte sólida ocupa X∈[–HW, HW–CW]  (ya la crea buildRoom)
-    // No necesitamos geo extra aquí porque buildRoom ya genera paredes parciales.
+        float xMin = p.x - sizeX / 2.0f;
+        float xMax = p.x + sizeX / 2.0f;
+        float zMin = p.z - sizeZ / 2.0f;
+        float zMax = p.z + sizeZ / 2.0f;
+        float yB   = RH - H; 
+
+        V.lightCasings.push_back(buildQuad({xMin, yB, zMax}, { 1, 0, 0}, sizeX, {0, 1, 0}, H, { 0, 0,  1}, 1, 1));
+        V.lightCasings.push_back(buildQuad({xMax, yB, zMin}, {-1, 0, 0}, sizeX, {0, 1, 0}, H, { 0, 0, -1}, 1, 1));
+        V.lightCasings.push_back(buildQuad({xMax, yB, zMax}, { 0, 0,-1}, sizeZ, {0, 1, 0}, H, { 1, 0,  0}, 1, 1));
+        V.lightCasings.push_back(buildQuad({xMin, yB, zMin}, { 0, 0, 1}, sizeZ, {0, 1, 0}, H, {-1, 0,  0}, 1, 1));
+
+        auto ledMesh = buildQuad({xMin, yB, zMin}, {1, 0, 0}, sizeX, {0, 0, 1}, sizeZ, {0, -1, 0}, 1, 1);
+        
+        // Separamos la malla de luz dependiendo de la zona
+        if (isRoom) V.roomLEDs.push_back(ledMesh);
+        else        V.corridorLEDs.push_back(ledMesh);
+    };
+
+    // Sala Principal
+    for (auto& p : roomLightPositions(o)) addFixture(p, false, true);
+    
+    // Corredores Lado A
+    for (auto& p : corridorLightPositions(V.corA1Center, CL1, true))  addFixture(p, true, false);
+    for (auto& p : corridorLightPositions(V.corA2Center, CL2, false)) addFixture(p, false, false);
+    for (auto& p : corridorLightPositions(V.corA3Center, CL3, true))  addFixture(p, true, false);
+    
+    // Corredores Lado B
+    for (auto& p : corridorLightPositions(V.corB1Center, CL1, true))  addFixture(p, true, false);
+    for (auto& p : corridorLightPositions(V.corB2Center, CL2, false)) addFixture(p, false, false);
+    for (auto& p : corridorLightPositions(V.corB3Center, CL3, true))  addFixture(p, true, false);
 
     if (variantIdx == 0) {
         std::cout << "\n[=== GEOMETRIA (Variante 0) ===]\n"
@@ -281,15 +307,18 @@ RoomVariant buildVariant(int variantIdx, AnomalyType anomaly)
 std::vector<glm::vec3> roomLightPositions(glm::vec3 origin)
 // =============================================================================
 {
+    std::vector<glm::vec3> pts;
     float y = RH - 0.4f;
-    float hW = hw() * 0.5f;
-    float hD = hd() * 0.5f;
-    return {
-        origin + glm::vec3(-hW, y, -hD),
-        origin + glm::vec3( hW, y, -hD),
-        origin + glm::vec3(-hW, y,  hD),
-        origin + glm::vec3( hW, y,  hD),
-    };
+    int n = 2; // Forzamos a que haya exactamente 2 lámparas
+    for (int i = 0; i < n; ++i) {
+        float t = (i + 0.5f) / n;           
+        float off = (t - 0.5f) * RW;
+        glm::vec3 p = origin;
+        p.y += y;
+        p.x += off;  // Se distribuirán en X = -5 y X = +5
+        pts.push_back(p);
+    }
+    return pts;
 }
 
 // =============================================================================
